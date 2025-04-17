@@ -32,9 +32,10 @@ CACHE_DURATION = 12 * 3600  # 12 hours in seconds
 CACHE_GRACE_PERIOD = 24 * 3600  # 24 hours grace period
 
 # --- CALENDAR FETCH SETTINGS ---
-FETCH_TIMEOUT = 30.0  # Increased timeout for production
-MAX_RETRIES = 3
-RETRY_DELAY = 1
+FETCH_TIMEOUT = 60.0  # Increased timeout for slow connections
+MAX_RETRIES = 5  # Increased number of retries
+RETRY_DELAY = 2  # Base delay between retries (will be multiplied by attempt number)
+RETRY_BACKOFF = 2  # Exponential backoff multiplier
 
 def load_calendar_cache():
     """Load cached calendar data with extended grace period"""
@@ -69,38 +70,68 @@ def parse_calendar_events(calendar_data):
     return list(cal.events)
 
 async def fetch_calendar_async(url):
-    """Fetch calendar data asynchronously with retries"""
+    """Fetch calendar data asynchronously with improved retry logic"""
+    last_exception = None
+    
     for attempt in range(MAX_RETRIES):
         try:
+            # Calculate exponential backoff delay
+            delay = RETRY_DELAY * (RETRY_BACKOFF ** attempt)
+            
+            # Create client with increased timeouts
             async with httpx.AsyncClient(
-                verify=True,  # Enable SSL verification
-                timeout=FETCH_TIMEOUT,
+                verify=True,
+                timeout=httpx.Timeout(
+                    connect=20.0,  # Connection timeout
+                    read=FETCH_TIMEOUT,  # Read timeout
+                    write=20.0,  # Write timeout
+                    pool=60.0  # Pool timeout
+                ),
                 follow_redirects=True,
-                http2=True
+                http2=False  # Disable HTTP/2 for better compatibility
             ) as client:
+                # Add more detailed headers
                 headers = {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                     'Accept': 'text/calendar,application/x-calendar,*/*',
                     'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
+                    'Pragma': 'no-cache',
+                    'Connection': 'keep-alive'
                 }
+                
+                # Log attempt (visible in Streamlit logs)
+                print(f"Calendar fetch attempt {attempt + 1}/{MAX_RETRIES}")
+                
                 response = await client.get(url, headers=headers)
-                response.raise_for_status()  # Raise exception for bad status codes
+                response.raise_for_status()
+                
                 if response.status_code == 200:
                     return response.text
                 raise httpx.HTTPError(f"Unexpected status code: {response.status_code}")
-        except httpx.TimeoutException:
-            if attempt == MAX_RETRIES - 1:
-                raise Exception(f"Timeout after {MAX_RETRIES} attempts")
-            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+                
+        except httpx.TimeoutException as e:
+            last_exception = f"Timeout on attempt {attempt + 1}: {str(e)}"
+            if attempt < MAX_RETRIES - 1:
+                print(f"Timeout occurred, retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+            continue
+            
         except httpx.HTTPError as e:
-            if attempt == MAX_RETRIES - 1:
-                raise Exception(f"HTTP error: {str(e)}")
-            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+            last_exception = f"HTTP error on attempt {attempt + 1}: {str(e)}"
+            if attempt < MAX_RETRIES - 1:
+                print(f"HTTP error occurred, retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+            continue
+            
         except Exception as e:
-            if attempt == MAX_RETRIES - 1:
-                raise Exception(f"Failed to fetch calendar: {str(e)}")
-            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+            last_exception = f"Error on attempt {attempt + 1}: {str(e)}"
+            if attempt < MAX_RETRIES - 1:
+                print(f"Error occurred, retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+            continue
+    
+    # If we get here, all retries failed
+    raise Exception(f"Calendar fetch failed after {MAX_RETRIES} attempts. Last error: {last_exception}")
 
 @st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
 def get_calendar_events(url):
@@ -119,13 +150,21 @@ def get_calendar_events(url):
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     loop.create_task(async_refresh_cache(url))
+                    loop.run_until_complete(asyncio.sleep(0))  # Give the task a chance to start
+                    loop.close()
                 except Exception as e:
                     st.warning(f"Background refresh scheduled: {str(e)}")
             return events
         except Exception as e:
             st.error(f"Error parsing cached data: {str(e)}")
+            if cached_data:  # Try to return raw cached data as fallback
+                try:
+                    cal = Calendar(cached_data)
+                    return list(cal.events)
+                except:
+                    pass
     
-    # No cache available, fetch synchronously with retries
+    # No cache available or cache parsing failed, fetch synchronously with retries
     try:
         # Create a new event loop for the synchronous context
         loop = asyncio.new_event_loop()
@@ -139,6 +178,14 @@ def get_calendar_events(url):
         return []
     except Exception as e:
         st.error(f"Failed to fetch calendar: {str(e)}")
+        # Last resort: try to use stale cache even if it's expired
+        if cached_data:
+            st.warning("Using expired cache as fallback")
+            try:
+                cal = Calendar(cached_data)
+                return list(cal.events)
+            except:
+                pass
         return []
 
 async def async_refresh_cache(url):
