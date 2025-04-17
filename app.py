@@ -463,10 +463,12 @@ def parse_game_result(event_name):
 
 # --- STREAMLIT APP LAYOUT ---
 
-# Add logo and title in a row
-col1, col2 = st.columns([1, 4])
+# Add logo and title in a row with better proportions
+col1, col2 = st.columns([1, 6])  # Adjusted ratio for better spacing
 with col1:
-    st.image("logo.png", width=100)
+    # Use a container for consistent padding and alignment
+    with st.container():
+        st.image("logo.png", width=68, use_container_width=False)  # Set fixed dimensions
 with col2:
     st.title("STL City 3 Game Participation")
 
