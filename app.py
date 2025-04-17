@@ -166,8 +166,8 @@ def get_session():
     """Create a requests session with retry logic"""
     session = requests.Session()
     retry_strategy = Retry(
-        total=3,  # number of retries
-        backoff_factor=1,  # wait 1, 2, 4 seconds between retries
+        total=5,  # increased from 3 to 5 retries
+        backoff_factor=2,  # increased from 1 to 2 - wait 2, 4, 8, 16, 32 seconds between retries
         status_forcelist=[429, 500, 502, 503, 504],
     )
     adapter = HTTPAdapter(max_retries=retry_strategy)
@@ -191,11 +191,14 @@ def get_calendar_events(url):
             if not is_fresh:
                 st.write("Updating calendar in background...")
                 try:
-                    session = requests.Session()
+                    session = get_session()
                     response = session.get(
                         url,
-                        timeout=30,
-                        headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'text/calendar,*/*'},
+                        timeout=60,  # Increased timeout to 60 seconds
+                        headers={
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                            'Accept': 'text/calendar,*/*'
+                        },
                         verify=False
                     )
                     
@@ -203,34 +206,63 @@ def get_calendar_events(url):
                         save_calendar_cache(response.text)
                         # We'll use the new data next time
                 except Exception as e:
-                    st.warning("Background refresh failed - will try again later")
+                    st.warning(f"Background refresh failed - will try again later. Error: {str(e)}")
                     
             return events
-        except Exception:
+        except Exception as e:
+            st.warning(f"Error parsing cached data: {str(e)}")
             pass
             
     # No valid cache, need to fetch
-    try:
-        st.write("Fetching fresh calendar data...")
-        session = requests.Session()
-        response = session.get(
-            url,
-            timeout=30,
-            headers={'User-Agent': 'Mozilla/5.0', 'Accept': 'text/calendar,*/*'},
-            verify=False
-        )
-        
-        if response.status_code == 200:
-            save_calendar_cache(response.text)
-            cal = Calendar(response.text)
-            return list(cal.events)
-        else:
-            st.error("Failed to fetch calendar")
-            return []
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            st.write(f"Fetching fresh calendar data (attempt {attempt + 1}/{max_retries})...")
+            session = get_session()
+            response = session.get(
+                url,
+                timeout=60,  # Increased timeout to 60 seconds
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/calendar,*/*'
+                },
+                verify=False
+            )
             
-    except Exception as e:
-        st.error(f"Error fetching calendar: {str(e)}")
-        return []
+            if response.status_code == 200:
+                save_calendar_cache(response.text)
+                cal = Calendar(response.text)
+                return list(cal.events)
+            else:
+                st.warning(f"Failed to fetch calendar (attempt {attempt + 1}/{max_retries}). Status code: {response.status_code}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                continue
+        except requests.exceptions.Timeout:
+            st.warning(f"Request timed out (attempt {attempt + 1}/{max_retries})")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+            continue
+        except Exception as e:
+            st.error(f"Error fetching calendar: {str(e)}")
+            if cached_data:
+                st.warning("Using last known good cache due to error")
+                try:
+                    cal = Calendar(cached_data)
+                    return list(cal.events)
+                except:
+                    pass
+            return []
+    
+    st.error("All attempts to fetch calendar failed")
+    if cached_data:
+        st.warning("Using last known good cache as fallback")
+        try:
+            cal = Calendar(cached_data)
+            return list(cal.events)
+        except:
+            pass
+    return []
 
 # Keep existing calendar URL
 ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
