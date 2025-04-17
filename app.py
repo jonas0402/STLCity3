@@ -31,6 +31,11 @@ CACHE_FILE = "calendar_cache.json"
 CACHE_DURATION = 12 * 3600  # 12 hours in seconds
 CACHE_GRACE_PERIOD = 24 * 3600  # 24 hours grace period
 
+# --- CALENDAR FETCH SETTINGS ---
+FETCH_TIMEOUT = 30.0  # Increased timeout for production
+MAX_RETRIES = 3
+RETRY_DELAY = 1
+
 def load_calendar_cache():
     """Load cached calendar data with extended grace period"""
     try:
@@ -63,52 +68,87 @@ def parse_calendar_events(calendar_data):
     cal = Calendar(calendar_data)
     return list(cal.events)
 
+async def fetch_calendar_async(url):
+    """Fetch calendar data asynchronously with retries"""
+    for attempt in range(MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(
+                verify=True,  # Enable SSL verification
+                timeout=FETCH_TIMEOUT,
+                follow_redirects=True,
+                http2=True
+            ) as client:
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'text/calendar,application/x-calendar,*/*',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                }
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()  # Raise exception for bad status codes
+                if response.status_code == 200:
+                    return response.text
+                raise httpx.HTTPError(f"Unexpected status code: {response.status_code}")
+        except httpx.TimeoutException:
+            if attempt == MAX_RETRIES - 1:
+                raise Exception(f"Timeout after {MAX_RETRIES} attempts")
+            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+        except httpx.HTTPError as e:
+            if attempt == MAX_RETRIES - 1:
+                raise Exception(f"HTTP error: {str(e)}")
+            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+        except Exception as e:
+            if attempt == MAX_RETRIES - 1:
+                raise Exception(f"Failed to fetch calendar: {str(e)}")
+            await asyncio.sleep(RETRY_DELAY * (attempt + 1))
+
 @st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
 def get_calendar_events(url):
-    """Fetch calendar events with immediate cache return"""
+    """Fetch calendar events with immediate cache return and better error handling"""
     # First try to get cached data
     cached_data, is_fresh = load_calendar_cache()
     
     if cached_data:
-        events = parse_calendar_events(cached_data)
-        
-        # If cache is stale, trigger background refresh without blocking
-        if not is_fresh:
-            st.write("Updating calendar in background...")
-            try:
-                asyncio.create_task(async_refresh_cache(url))
-            except Exception as e:
-                st.warning(f"Background refresh scheduled: {str(e)}")
-        return events
+        try:
+            events = parse_calendar_events(cached_data)
+            
+            # If cache is stale, trigger background refresh without blocking
+            if not is_fresh:
+                try:
+                    # Use asyncio in a thread-safe way
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    loop.create_task(async_refresh_cache(url))
+                except Exception as e:
+                    st.warning(f"Background refresh scheduled: {str(e)}")
+            return events
+        except Exception as e:
+            st.error(f"Error parsing cached data: {str(e)}")
     
-    # No cache available, fetch synchronously
+    # No cache available, fetch synchronously with retries
     try:
-        calendar_data = asyncio.run(fetch_calendar_async(url))
-        save_calendar_cache(calendar_data)
-        return parse_calendar_events(calendar_data)
+        # Create a new event loop for the synchronous context
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        calendar_data = loop.run_until_complete(fetch_calendar_async(url))
+        loop.close()
+        
+        if calendar_data:
+            save_calendar_cache(calendar_data)
+            return parse_calendar_events(calendar_data)
+        return []
     except Exception as e:
         st.error(f"Failed to fetch calendar: {str(e)}")
         return []
 
 async def async_refresh_cache(url):
-    """Refresh the cache asynchronously"""
+    """Refresh the cache asynchronously with better error handling"""
     try:
         calendar_data = await fetch_calendar_async(url)
-        save_calendar_cache(calendar_data)
+        if calendar_data:
+            save_calendar_cache(calendar_data)
     except Exception as e:
         st.warning(f"Background refresh failed: {str(e)}")
-
-async def fetch_calendar_async(url):
-    """Fetch calendar data asynchronously"""
-    async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/calendar,*/*'
-        }
-        response = await client.get(url, headers=headers)
-        if response.status_code == 200:
-            return response.text
-        raise Exception(f"Failed to fetch: {response.status_code}")
 
 # Keep existing calendar URL
 ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
