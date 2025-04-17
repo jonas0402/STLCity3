@@ -460,24 +460,36 @@ with col1:
 with col2:
     st.title("STL City 3 Game Participation")
 
-# Show active user in the sidebar
+# Show login form in main content area for mobile users if not logged in
+if not st.session_state.user_name:
+    st.info("👋 Welcome! Please login to RSVP for games")
+    
+    # Create a centered container for login
+    with st.container():
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.subheader("🔑 Login")
+            name = st.text_input("Enter your name:", placeholder="Your name here")
+            if name:
+                st.session_state.user_name = name
+                st.rerun()
+    
+    # Early return if not logged in
+    st.warning("⚠️ You must login to view games and RSVP")
+    st.stop()
+
+# Show active user status in main area for mobile
+st.success(f"👤 Logged in as: {st.session_state.user_name}")
+
+# Add logout button in main content
+if st.button("📱 Logout", type="secondary"):
+    st.session_state.user_name = None
+    st.rerun()
+
+# Remove duplicate login from sidebar since it's now in main content
 with st.sidebar:
     if st.session_state.user_name:
         st.success(f"Logged in as: {st.session_state.user_name}")
-        if st.button("Logout"):
-            st.session_state.user_name = None
-            st.rerun()
-    else:
-        st.title("Login")
-        name = st.text_input("Enter your name to RSVP:")
-        if name:
-            st.session_state.user_name = name
-            st.rerun()
-
-# First ensure user is authenticated
-if not st.session_state.user_name:
-    st.warning("Please enter your name in the sidebar to RSVP for games")
-    st.stop()
 
 # Main tabs for different views
 tab1, tab2, tab3, tab4 = st.tabs(["This Week", "Future Games", "Past Games", "My RSVPs"])
