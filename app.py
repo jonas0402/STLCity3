@@ -28,7 +28,7 @@ urllib3.disable_warnings()
 
 # --- CALENDAR CACHE SETTINGS ---
 CACHE_FILE = "calendar_cache.json"
-CACHE_DURATION = 12 * 3600  # 12 hours in seconds - increased from 6 hours
+CACHE_DURATION = 12 * 3600  # 12 hours in seconds
 CACHE_GRACE_PERIOD = 24 * 3600  # 24 hours grace period
 
 def load_calendar_cache():
@@ -38,16 +38,9 @@ def load_calendar_cache():
             with open(CACHE_FILE, 'r') as f:
                 cache = json.load(f)
                 age = time.time() - cache['timestamp']
-                
-                # Return immediately if cache is fresh
-                if age < CACHE_DURATION:
-                    return cache['data'], True
-                    
-                # Use stale cache while fetching new data
-                if age < CACHE_GRACE_PERIOD:
-                    return cache['data'], False
+                return cache['data'], age < CACHE_DURATION
     except Exception as e:
-        st.warning(f"Cache read error (using fresh data): {str(e)}")
+        st.warning(f"Cache read error: {str(e)}")
     return None, False
 
 def save_calendar_cache(data):
@@ -62,9 +55,52 @@ def save_calendar_cache(data):
     except Exception as e:
         st.warning(f"Cache write error: {str(e)}")
 
+@st.cache_data(ttl=300)  # 5 minute TTL for parsed events
+def parse_calendar_events(calendar_data):
+    """Parse calendar data into events (cached separately from raw data)"""
+    if not calendar_data:
+        return []
+    cal = Calendar(calendar_data)
+    return list(cal.events)
+
+@st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
+def get_calendar_events(url):
+    """Fetch calendar events with immediate cache return"""
+    # First try to get cached data
+    cached_data, is_fresh = load_calendar_cache()
+    
+    if cached_data:
+        events = parse_calendar_events(cached_data)
+        
+        # If cache is stale, trigger background refresh without blocking
+        if not is_fresh:
+            st.write("Updating calendar in background...")
+            try:
+                asyncio.create_task(async_refresh_cache(url))
+            except Exception as e:
+                st.warning(f"Background refresh scheduled: {str(e)}")
+        return events
+    
+    # No cache available, fetch synchronously
+    try:
+        calendar_data = asyncio.run(fetch_calendar_async(url))
+        save_calendar_cache(calendar_data)
+        return parse_calendar_events(calendar_data)
+    except Exception as e:
+        st.error(f"Failed to fetch calendar: {str(e)}")
+        return []
+
+async def async_refresh_cache(url):
+    """Refresh the cache asynchronously"""
+    try:
+        calendar_data = await fetch_calendar_async(url)
+        save_calendar_cache(calendar_data)
+    except Exception as e:
+        st.warning(f"Background refresh failed: {str(e)}")
+
 async def fetch_calendar_async(url):
     """Fetch calendar data asynchronously"""
-    async with httpx.AsyncClient(verify=False, timeout=30.0) as client:
+    async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'text/calendar,*/*'
@@ -72,50 +108,13 @@ async def fetch_calendar_async(url):
         response = await client.get(url, headers=headers)
         if response.status_code == 200:
             return response.text
-        raise Exception(f"Failed to fetch calendar: {response.status_code}")
+        raise Exception(f"Failed to fetch: {response.status_code}")
 
-@st.cache_data(ttl=CACHE_DURATION)
-def get_calendar_events(url):
-    """Fetch calendar events with immediate cache return and async background refresh"""
-    # First try to get cached data
-    cached_data, is_fresh = load_calendar_cache()
-    
-    if cached_data:
-        try:
-            cal = Calendar(cached_data)
-            events = list(cal.events)
-            
-            # If cache is stale, trigger background refresh
-            if not is_fresh:
-                try:
-                    # Use asyncio to fetch new data in background
-                    calendar_data = asyncio.run(fetch_calendar_async(url))
-                    save_calendar_cache(calendar_data)
-                except Exception as e:
-                    st.warning(f"Background refresh failed (using cached data): {str(e)}")
-                    
-            return events
-            
-        except Exception as e:
-            st.warning(f"Error parsing cached data: {str(e)}")
-    
-    # No valid cache, need to fetch
-    try:
-        # Synchronous fetch if no cache available
-        calendar_data = asyncio.run(fetch_calendar_async(url))
-        save_calendar_cache(calendar_data)
-        cal = Calendar(calendar_data)
-        return list(cal.events)
-    except Exception as e:
-        st.error(f"Failed to fetch calendar: {str(e)}")
-        if cached_data:
-            st.warning("Using last known good cache as fallback")
-            try:
-                cal = Calendar(cached_data)
-                return list(cal.events)
-            except:
-                pass
-        return []
+# Keep existing calendar URL
+ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
+
+# Load calendar without displaying "fetching" message
+events = get_calendar_events(ical_url)
 
 # --- SESSION STATE MANAGEMENT ---
 if 'user_name' not in st.session_state:
@@ -220,12 +219,6 @@ def get_rsvp_list(event_uid):
     """, (event_uid,))
     return c.fetchall()
 
-# Keep existing calendar URL
-ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
-st.write("Starting calendar fetch...")
-all_events = get_calendar_events(ical_url)
-st.write("Calendar fetch complete.")
-
 # --- SETUP CALENDAR VIEW ---
 today = date.today()
 current_week_start = today - timedelta(days=today.weekday())  # Monday
@@ -233,9 +226,9 @@ current_week_end = current_week_start + timedelta(days=6)
 
 # Improved event sorting
 now = datetime.now(timezone.utc)
-current_week_events = [e for e in all_events if current_week_start <= e.begin.date() <= current_week_end]
-future_events = [e for e in all_events if e.begin.date() > current_week_end]
-past_events = [e for e in all_events if e.begin.datetime < now]
+current_week_events = [e for e in events if current_week_start <= e.begin.date() <= current_week_end]
+future_events = [e for e in events if e.begin.date() > current_week_end]
+past_events = [e for e in events if e.begin.datetime < now]
 
 # Sort all event lists
 current_week_events.sort(key=lambda e: e.begin.datetime)
@@ -589,7 +582,7 @@ with tab4:
         
         for rsvp in user_rsvps:
             rsvp_id, user_name, event_uid, participation, timestamp = rsvp
-            event = next((e for e in all_events if e.uid == event_uid), None)
+            event = next((e for e in events if e.uid == event_uid), None)
             if event:
                 if event.begin.datetime > now:
                     upcoming_rsvps.append((event, rsvp))
