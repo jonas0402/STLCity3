@@ -1,11 +1,10 @@
 import streamlit as st
-import base64
-from datetime import datetime, timezone, date, timedelta
 from supabase import create_client
 from dotenv import load_dotenv
 import os
 import requests
 from ics import Calendar
+from datetime import datetime, timezone, date, timedelta
 import pandas as pd
 import json
 import time
@@ -29,29 +28,6 @@ st.set_page_config(
     page_icon="⚽",
     layout="wide"
 )
-
-def get_background_style():
-    try:
-        with open('city_dark.png', 'rb') as f:
-            data = f.read()
-            encoded = base64.b64encode(data).decode()
-            return f'''
-                <style>
-                    .stApp {{
-                        background-image: url(data:image/png;base64,{encoded});
-                        background-size: cover;
-                        background-position: center;
-                        background-attachment: fixed;
-                    }}
-                </style>
-            '''
-    except Exception as e:
-        return None
-
-# Apply background style before any other Streamlit commands
-background_style = get_background_style()
-if background_style:
-    st.markdown(background_style, unsafe_allow_html=True)
 
 # --- SUPABASE CONFIGURATION ---
 try:
