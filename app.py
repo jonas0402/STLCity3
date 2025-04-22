@@ -12,7 +12,177 @@ from pathlib import Path
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
-from utils import parse_game_result
+
+# Must be the first Streamlit command
+st.set_page_config(
+    page_title="STL City 3 Game Participation",
+    page_icon="⚽",
+    layout="wide"
+)
+
+# --- CALENDAR CACHE SETTINGS ---
+CACHE_FILE = "calendar_cache.json"
+CACHE_DURATION = 12 * 3600  # 12 hours in seconds
+
+# --- CALENDAR FETCH SETTINGS ---
+FETCH_TIMEOUT = 30
+RETRY_STRATEGY = Retry(
+    total=5,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+adapter = HTTPAdapter(max_retries=RETRY_STRATEGY)
+http = requests.Session()
+http.mount("https://", adapter)
+http.mount("http://", adapter)
+
+# Disable insecure request warnings
+urllib3.disable_warnings()
+
+# Define parse_game_result locally to avoid import issues
+def parse_game_result(event_name):
+    """Parse the game result from the event name if available"""
+    if "L" in event_name and "vs" in event_name:
+        try:
+            # Extract score like "L 3-5"
+            result_part = event_name.split("vs")[0]
+            if "L" in result_part:
+                score = result_part.split("L")[1].strip()
+                return f"Loss {score}"
+        except:
+            pass
+    elif "W" in event_name and "vs" in event_name:
+        try:
+            # Extract score like "W 3-5"
+            result_part = event_name.split("vs")[0]
+            if "W" in result_part:
+                score = result_part.split("W")[1].strip()
+                return f"Win {score}"
+        except:
+            pass
+    return None
+
+@st.cache_data(ttl=300)  # 5 minute TTL for parsed events
+def parse_calendar_events(calendar_data):
+    """Parse calendar data into events (cached separately from raw data)"""
+    if not calendar_data:
+        return []
+    cal = Calendar(calendar_data)
+    return list(cal.events)
+
+def fetch_calendar_sync(url):
+    """Fetch calendar data synchronously with retries"""
+    try:
+        response = http.get(
+            url,
+            timeout=FETCH_TIMEOUT,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/calendar,*/*'
+            },
+            verify=False  # Disable SSL verification for problematic servers
+        )
+        response.raise_for_status()
+        return response.text
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"Failed to fetch calendar: {str(e)}")
+
+@st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
+def get_calendar_events(url):
+    """Fetch calendar events and save to database"""
+    try:
+        # Try to fetch new data
+        calendar_data = fetch_calendar_sync(url)
+        if calendar_data:
+            # Save to cache file for backup
+            save_calendar_cache(calendar_data)
+            events = parse_calendar_events(calendar_data)
+            return events
+    except Exception as e:
+        st.error(f"Failed to fetch fresh calendar data: {str(e)}")
+        
+        # Try to load from cache
+        cached_data, _ = load_calendar_cache()
+        if cached_data:
+            st.warning("Using cached data while server is unavailable")
+            return parse_calendar_events(cached_data)
+        
+        # If everything fails, return empty list
+        return []
+
+def get_calendar_events_no_cache(url):
+    """Non-cached version to initialize the calendar data"""
+    try:
+        calendar_data = fetch_calendar_sync(url)
+        if calendar_data:
+            save_calendar_cache(calendar_data)
+            return parse_calendar_events(calendar_data)
+    except Exception as e:
+        st.error(f"Failed to fetch fresh calendar data: {str(e)}")
+        cached_data, _ = load_calendar_cache()
+        if cached_data:
+            st.warning("Using cached data while server is unavailable")
+            return parse_calendar_events(cached_data)
+    return []
+
+def load_calendar_cache():
+    """Load cached calendar data"""
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+                return cache['data'], True
+    except Exception as e:
+        st.warning(f"Cache read error: {str(e)}")
+    return None, False
+
+def save_calendar_cache(data):
+    """Save calendar data to cache file"""
+    try:
+        cache = {
+            'timestamp': time.time(),
+            'data': data
+        }
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(cache, f)
+    except Exception as e:
+        st.warning(f"Cache write error: {str(e)}")
+
+# Keep existing calendar URL and fetch events right away
+ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
+events = get_calendar_events_no_cache(ical_url)  # Use non-cached version on first load
+
+# --- SUPABASE CONFIGURATION ---
+try:
+    # Try to get credentials from Streamlit secrets
+    supabase = create_client(
+        supabase_url=st.secrets["supabase"]["url"],
+        supabase_key=st.secrets["supabase"]["key"]
+    )
+except Exception as e:
+    st.error("⚠️ Supabase connection failed. Please check your credentials in Streamlit secrets.")
+    st.stop()
+
+# --- DATABASE VERIFICATION ---
+def verify_database_setup():
+    """Verify that the required tables exist"""
+    try:
+        # Check if tables exist by trying to select from them
+        supabase.table("users").select("id").limit(1).execute()
+        supabase.table("rsvps").select("id").limit(1).execute()
+        
+        # Create games table if it doesn't exist
+        supabase.table("games").select("event_uid").limit(1).execute()
+        
+        return True
+    except Exception as e:
+        st.error(f"Database verification failed: {str(e)}")
+        st.error("Please make sure all required tables are created in Supabase")
+        return False
+
+# Verify database setup
+if not verify_database_setup():
+    st.stop()
 
 # --- HELPER FUNCTIONS ---
 
@@ -54,148 +224,6 @@ def update_game_result(event_uid, result_type, score):
     except Exception as e:
         st.error(f"Error updating game result: {str(e)}")
 
-# Must be the first Streamlit command
-st.set_page_config(
-    page_title="STL City 3 Game Participation",
-    page_icon="⚽",
-    layout="wide"
-)
-
-# --- SUPABASE CONFIGURATION ---
-try:
-    # Try to get credentials from Streamlit secrets
-    supabase = create_client(
-        supabase_url=st.secrets["supabase"]["url"],
-        supabase_key=st.secrets["supabase"]["key"]
-    )
-except Exception as e:
-    st.error("⚠️ Supabase connection failed. Please check your credentials in Streamlit secrets.")
-    st.stop()
-
-# --- DATABASE VERIFICATION ---
-def verify_database_setup():
-    """Verify that the required tables exist"""
-    try:
-        # Check if tables exist by trying to select from them
-        supabase.table("users").select("id").limit(1).execute()
-        supabase.table("rsvps").select("id").limit(1).execute()
-        
-        # Create games table if it doesn't exist
-        supabase.table("games").select("event_uid").limit(1).execute()
-        
-        return True
-    except Exception as e:
-        st.error(f"Database verification failed: {str(e)}")
-        st.error("Please make sure all required tables are created in Supabase")
-        return False
-
-# Verify database setup
-if not verify_database_setup():
-    st.stop()
-
-# --- CALENDAR CACHE SETTINGS ---
-CACHE_FILE = "calendar_cache.json"
-CACHE_DURATION = 12 * 3600  # 12 hours in seconds
-
-# --- CALENDAR FETCH SETTINGS ---
-FETCH_TIMEOUT = 30
-RETRY_STRATEGY = Retry(
-    total=5,
-    backoff_factor=1,
-    status_forcelist=[429, 500, 502, 503, 504],
-)
-adapter = HTTPAdapter(max_retries=RETRY_STRATEGY)
-http = requests.Session()
-http.mount("https://", adapter)
-http.mount("http://", adapter)
-
-# Disable insecure request warnings
-urllib3.disable_warnings()
-
-# --- DATABASE HELPER FUNCTIONS ---
-@st.cache_data(ttl=300)  # 5 minute TTL for parsed events
-def parse_calendar_events(calendar_data):
-    """Parse calendar data into events (cached separately from raw data)"""
-    if not calendar_data:
-        return []
-    cal = Calendar(calendar_data)
-    return list(cal.events)
-
-def fetch_calendar_sync(url):
-    """Fetch calendar data synchronously with retries"""
-    try:
-        response = http.get(
-            url,
-            timeout=FETCH_TIMEOUT,
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'text/calendar,*/*'
-            },
-            verify=False  # Disable SSL verification for problematic servers
-        )
-        response.raise_for_status()
-        return response.text
-    except requests.exceptions.RequestException as e:
-        raise Exception(f"Failed to fetch calendar: {str(e)}")
-
-@st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
-def get_calendar_events(url):
-    """Fetch calendar events and save to database"""
-    try:
-        # Try to fetch new data
-        calendar_data = fetch_calendar_sync(url)
-        if calendar_data:
-            # Save to cache file for backup
-            save_calendar_cache(calendar_data)
-            events = parse_calendar_events(calendar_data)
-            
-            # Save each event to the database
-            for event in events:
-                save_or_update_game(event)
-                
-                # Check for game result in the event name
-                result = parse_game_result(event.name)
-                if result:
-                    result_type = "W" if "Win" in result else "L"
-                    score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
-                    update_game_result(event.uid, result_type, score)
-            
-            return events
-    except Exception as e:
-        st.error(f"Failed to fetch fresh calendar data: {str(e)}")
-        
-        # Try to load from cache
-        cached_data, _ = load_calendar_cache()
-        if cached_data:
-            st.warning("Using cached data while server is unavailable")
-            return parse_calendar_events(cached_data)
-        
-        # If everything fails, return empty list
-        return []
-
-def load_calendar_cache():
-    """Load cached calendar data"""
-    try:
-        if os.path.exists(CACHE_FILE):
-            with open(CACHE_FILE, 'r') as f:
-                cache = json.load(f)
-                return cache['data'], True
-    except Exception as e:
-        st.warning(f"Cache read error: {str(e)}")
-    return None, False
-
-def save_calendar_cache(data):
-    """Save calendar data to cache file"""
-    try:
-        cache = {
-            'timestamp': time.time(),
-            'data': data
-        }
-        with open(CACHE_FILE, 'w') as f:
-            json.dump(cache, f)
-    except Exception as e:
-        st.warning(f"Cache write error: {str(e)}")
-
 # --- DATABASE HELPER FUNCTIONS ---
 def get_all_games():
     """Get all games from the database"""
@@ -205,12 +233,6 @@ def get_all_games():
     except Exception as e:
         st.error(f"Error getting games: {str(e)}")
         return []
-
-# Keep existing calendar URL
-ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
-
-# Load calendar without displaying "fetching" message
-events = get_calendar_events(ical_url)
 
 # --- SESSION STATE MANAGEMENT ---
 if 'user_name' not in st.session_state:
@@ -637,6 +659,7 @@ def display_future_events(events):
     events_sorted = sorted(events, key=lambda e: e.begin.date())
     for event in events_sorted:
         with st.expander(f"{event.begin.date()} {event.begin.format('HH:mm')} - {event.name}"):
+
             in_count, out_count = get_rsvp_counts(event.uid)
             
             # Display attendance status with progress bar
@@ -765,6 +788,7 @@ with tab3:
         st.info(f"Showing all {len(past_events)} past games")
         for event in past_events:  # Show all past games
             with st.expander(f"{event.begin.date()} {event.begin.format('HH:mm')} - {event.name}"):
+
                 # Parse and display game result if available
                 result = parse_game_result(event.name)
                 if result:
@@ -838,6 +862,7 @@ with tab4:
             st.subheader("Upcoming Games")
             for event, rsvp in sorted(upcoming_rsvps, key=lambda x: x[0].begin.datetime):
                 with st.expander(f"{event.begin.date()} {event.begin.format('HH:mm')} - {event.name}"):
+
                     st.write(f"RSVP'd on: {rsvp['timestamp']}")
                     handle_rsvp_buttons(event.uid, st.session_state.user_name, "my_")
         
