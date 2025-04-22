@@ -58,7 +58,7 @@ def get_cookie(key):
 def set_cookie(key, value):
     """Set cookie value"""
     current_params = st.query_params
-    current_params[key] = value
+    current_params[key] = [value]  # ✅ Wrap in list
     st.query_params = current_params
 
 # Initialize authentication
