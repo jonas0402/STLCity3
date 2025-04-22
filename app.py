@@ -203,9 +203,9 @@ def get_rsvp_counts(event_uid):
 def get_all_rsvps():
     """Return all RSVP records joined with user names."""
     try:
-        # Use a raw query to join tables since the Python client doesn't support joins directly
+        # Use foreign key expansion with proper Supabase syntax
         response = supabase.table("rsvps").select(
-            "rsvps.id, users(name), rsvps.event_uid, rsvps.participation, rsvps.timestamp"
+            "id, event_uid, participation, timestamp, users:user_id(name)"
         ).execute()
         
         # Transform the response to match the expected format
