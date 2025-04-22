@@ -32,7 +32,7 @@ st.set_page_config(
 
 def get_background_style():
     try:
-        with open('soccer_field.jpg', 'rb') as f:
+        with open('city_dark.png', 'rb') as f:
             data = f.read()
             encoded = base64.b64encode(data).decode()
             return f'''
