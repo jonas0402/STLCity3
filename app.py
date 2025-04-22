@@ -14,13 +14,20 @@ from urllib3.util.retry import Retry
 import urllib3
 
 # --- SESSION MANAGEMENT ---
-def init_session_state():
-    """Initialize session state variables"""
-    if 'user_name' not in st.session_state:
-        st.session_state.user_name = None
+if 'authentication_status' not in st.session_state:
+    st.session_state['authentication_status'] = None
+    
+if 'user_name' not in st.session_state:
+    st.session_state['user_name'] = None
 
-# Initialize session state at startup
-init_session_state()
+# --- USER AUTHENTICATION ---
+def authenticate_user(username):
+    st.session_state['authentication_status'] = True
+    st.session_state['user_name'] = username
+
+def logout_user():
+    st.session_state['authentication_status'] = None
+    st.session_state['user_name'] = None
 
 # Must be the first Streamlit command
 st.set_page_config(
@@ -300,7 +307,8 @@ def get_all_games():
         return []
 
 # --- USER AUTHENTICATION ---
-if not st.session_state.user_name:
+# Check if user is already authenticated
+if not st.session_state['authentication_status']:
     st.info("👋 Welcome! Please login to RSVP for games")
     
     # Create a centered container for login
@@ -310,7 +318,7 @@ if not st.session_state.user_name:
             st.subheader("🔑 Login")
             name = st.text_input("Enter your name:", placeholder="Your name here")
             if name:
-                st.session_state.user_name = name
+                authenticate_user(name)
                 st.rerun()
     
     # Early return if not logged in
@@ -320,9 +328,9 @@ if not st.session_state.user_name:
 # Show active user status in main area for mobile
 st.success(f"👤 Logged in as: {st.session_state.user_name}")
 
-# Add logout button in main content
+# Update the logout button to use the logout function
 if st.button("📱 Logout", type="secondary"):
-    st.session_state.user_name = None
+    logout_user()
     st.rerun()
 
 # --- DATABASE HELPER FUNCTIONS ---
