@@ -38,10 +38,14 @@ def verify_database_setup():
         # Check if tables exist by trying to select from them
         supabase.table("users").select("id").limit(1).execute()
         supabase.table("rsvps").select("id").limit(1).execute()
+        
+        # Create games table if it doesn't exist
+        supabase.table("games").select("event_uid").limit(1).execute()
+        
         return True
     except Exception as e:
         st.error(f"Database verification failed: {str(e)}")
-        st.error("Please make sure the 'users' and 'rsvps' tables are created in Supabase")
+        st.error("Please make sure all required tables are created in Supabase")
         return False
 
 # Verify database setup
@@ -94,14 +98,27 @@ def fetch_calendar_sync(url):
 
 @st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
 def get_calendar_events(url):
-    """Fetch calendar events with improved error handling and caching"""
+    """Fetch calendar events and save to database"""
     try:
         # Try to fetch new data
         calendar_data = fetch_calendar_sync(url)
         if calendar_data:
             # Save to cache file for backup
             save_calendar_cache(calendar_data)
-            return parse_calendar_events(calendar_data)
+            events = parse_calendar_events(calendar_data)
+            
+            # Save each event to the database
+            for event in events:
+                save_or_update_game(event)
+                
+                # Check for game result in the event name
+                result = parse_game_result(event.name)
+                if result:
+                    result_type = "W" if "Win" in result else "L"
+                    score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
+                    update_game_result(event.uid, result_type, score)
+            
+            return events
     except Exception as e:
         st.error(f"Failed to fetch fresh calendar data: {str(e)}")
         
@@ -136,6 +153,54 @@ def save_calendar_cache(data):
             json.dump(cache, f)
     except Exception as e:
         st.warning(f"Cache write error: {str(e)}")
+
+# --- DATABASE HELPER FUNCTIONS ---
+def save_or_update_game(event):
+    """Save or update game information in the database"""
+    try:
+        # Extract game details
+        game_data = {
+            "event_uid": event.uid,
+            "name": event.name,
+            "start_time": event.begin.datetime.isoformat(),
+            "location": event.location if event.location else "",
+            "opponent": event.name.split("vs")[1].strip() if "vs" in event.name else "",
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Check if game exists
+        response = supabase.table("games").select("event_uid").eq("event_uid", event.uid).execute()
+        
+        if not response.data:
+            # New game, insert it
+            supabase.table("games").insert(game_data).execute()
+        else:
+            # Existing game, update it
+            supabase.table("games").update(game_data).eq("event_uid", event.uid).execute()
+            
+    except Exception as e:
+        st.error(f"Error saving game: {str(e)}")
+
+def update_game_result(event_uid, result_type, score):
+    """Update game result in the database"""
+    try:
+        game_data = {
+            "result": result_type,  # "W" or "L"
+            "score": score,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        supabase.table("games").update(game_data).eq("event_uid", event_uid).execute()
+    except Exception as e:
+        st.error(f"Error updating game result: {str(e)}")
+
+def get_all_games():
+    """Get all games from the database"""
+    try:
+        response = supabase.table("games").select("*").order("start_time").execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error getting games: {str(e)}")
+        return []
 
 # Keep existing calendar URL
 ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
@@ -266,6 +331,156 @@ def get_rsvp_list(event_uid):
     except Exception as e:
         st.error(f"Error getting RSVP list: {str(e)}")
         return []
+
+# --- STATISTICS FUNCTIONS ---
+def get_season_stats():
+    """Get overall season statistics"""
+    try:
+        # Get all games with results
+        response = supabase.table("games").select("*").not_.is_("result", "null").order("start_time").execute()
+        games = response.data
+        
+        if not games:
+            return None
+            
+        total_games = len(games)
+        wins = len([g for g in games if g['result'] == 'W'])
+        losses = len([g for g in games if g['result'] == 'L'])
+        
+        # Calculate win percentage
+        win_pct = (wins / total_games) * 100 if total_games > 0 else 0
+        
+        # Parse scores to get goals for/against
+        goals_for = 0
+        goals_against = 0
+        for game in games:
+            if game['score']:
+                try:
+                    our_score, their_score = map(int, game['score'].split('-'))
+                    goals_for += our_score
+                    goals_against += their_score
+                except:
+                    continue
+        
+        return {
+            'total_games': total_games,
+            'wins': wins,
+            'losses': losses,
+            'win_pct': win_pct,
+            'goals_for': goals_for,
+            'goals_against': goals_against,
+            'goal_diff': goals_for - goals_against,
+            'games': games
+        }
+    except Exception as e:
+        st.error(f"Error getting season stats: {str(e)}")
+        return None
+
+def get_opponent_stats():
+    """Get statistics broken down by opponent"""
+    try:
+        # Get all games with results and opponents
+        response = supabase.table("games").select("*").not_.is_("result", "null").not_.is_("opponent", "").execute()
+        games = response.data
+        
+        opponent_stats = {}
+        for game in games:
+            opponent = game['opponent']
+            if opponent not in opponent_stats:
+                opponent_stats[opponent] = {'games': 0, 'wins': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0}
+            
+            stats = opponent_stats[opponent]
+            stats['games'] += 1
+            
+            if game['result'] == 'W':
+                stats['wins'] += 1
+            elif game['result'] == 'L':
+                stats['losses'] += 1
+                
+            if game['score']:
+                try:
+                    our_score, their_score = map(int, game['score'].split('-'))
+                    stats['goals_for'] += our_score
+                    stats['goals_against'] += their_score
+                except:
+                    continue
+        
+        return opponent_stats
+    except Exception as e:
+        st.error(f"Error getting opponent stats: {str(e)}")
+        return None
+
+def display_season_stats():
+    """Display season statistics in a visually appealing way"""
+    stats = get_season_stats()
+    if not stats:
+        st.warning("No game results available yet")
+        return
+        
+    # Overall Record
+    st.subheader("Season Record")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Games Played", stats['total_games'])
+    with col2:
+        st.metric("Wins", stats['wins'])
+    with col3:
+        st.metric("Losses", stats['losses'])
+    with col4:
+        st.metric("Win %", f"{stats['win_pct']:.1f}%")
+    
+    # Goals
+    st.subheader("Scoring")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Goals For", stats['goals_for'])
+    with col2:
+        st.metric("Goals Against", stats['goals_against'])
+    with col3:
+        st.metric("Goal Difference", stats['goal_diff'], 
+                 delta_color="normal" if stats['goal_diff'] >= 0 else "inverse")
+    
+    # Recent Form
+    st.subheader("Recent Form")
+    recent_games = stats['games'][-5:]  # Last 5 games
+    form_cols = st.columns(min(5, len(recent_games)))
+    for i, game in enumerate(recent_games):
+        with form_cols[i]:
+            if game['result'] == 'W':
+                st.success("W")
+            else:
+                st.error("L")
+            if game['score']:
+                st.caption(f"{game['score']}")
+            st.caption(f"vs {game['opponent']}")
+    
+    # Opponent Analysis
+    st.subheader("Opponent Analysis")
+    opponent_stats = get_opponent_stats()
+    if opponent_stats:
+        # Convert to DataFrame for better display
+        records = []
+        for opponent, stats in opponent_stats.items():
+            win_pct = (stats['wins'] / stats['games'] * 100) if stats['games'] > 0 else 0
+            records.append({
+                'Opponent': opponent,
+                'Games': stats['games'],
+                'Wins': stats['wins'],
+                'Losses': stats['losses'],
+                'Win %': f"{win_pct:.1f}%",
+                'GF': stats['goals_for'],
+                'GA': stats['goals_against'],
+                'GD': stats['goals_for'] - stats['goals_against']
+            })
+        
+        if records:
+            df = pd.DataFrame(records)
+            st.dataframe(df.set_index('Opponent'), use_container_width=True)
+            
+            # Visualization
+            fig_data = pd.DataFrame(records)
+            fig_data['Win %'] = fig_data['Win %'].str.rstrip('%').astype(float)
+            st.bar_chart(data=fig_data.set_index('Opponent')['Win %'])
 
 # --- DISPLAY FUNCTIONS ---
 def display_attendance_status(in_count):
@@ -534,7 +749,7 @@ with st.sidebar:
         st.success(f"Logged in as: {st.session_state.user_name}")
 
 # Main tabs for different views
-tab1, tab2, tab3, tab4 = st.tabs(["This Week", "Future Games", "Past Games", "My RSVPs"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["This Week", "Future Games", "Past Games", "My RSVPs", "Statistics"])
 
 with tab1:
     st.header("Current Week Calendar")
@@ -659,3 +874,7 @@ with tab4:
                 delete_rsvp(rsvp['id'])
             st.success("All your RSVPs have been cleared!")
             st.rerun()
+
+with tab5:
+    st.header("Team Statistics")
+    display_season_stats()
