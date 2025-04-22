@@ -817,18 +817,41 @@ with tab1:
     display_week_calendar(current_week_start, current_week_events)
     
     if current_week_events:
-        st.subheader("Week Overview")
-        stats = []
+        st.subheader("Week Overview - RSVPs")
+        all_rsvps = []
         for event in current_week_events:
-            in_count, out_count = get_rsvp_counts(event.uid)
-            stats.append({
-                "Game": f"{event.name} ({event.begin.format('YYYY-MM-DD')})",
-                "In": in_count,
-                "Out": out_count
-            })
-        if stats:
-            df_stats = pd.DataFrame(stats).set_index("Game")
-            st.bar_chart(df_stats)
+            # Get RSVPs for this event
+            rsvps = get_rsvp_list(event.uid)
+            rsvp_data = supabase.table("rsvps").select(
+                "users:user_id(name), participation, timestamp"
+            ).eq("event_uid", event.uid).execute()
+            
+            if rsvp_data.data:
+                for rsvp in rsvp_data.data:
+                    all_rsvps.append({
+                        "Game": f"{event.name} ({event.begin.format('MM/DD')})",
+                        "Player": rsvp['users']['name'].title(),
+                        "Status": rsvp['participation'],
+                        "RSVP Time": pd.to_datetime(rsvp['timestamp']).strftime("%m/%d %I:%M %p")
+                    })
+        
+        if all_rsvps:
+            df_rsvps = pd.DataFrame(all_rsvps)
+            st.dataframe(
+                df_rsvps,
+                column_config={
+                    "Game": st.column_config.TextColumn("Game", width="medium"),
+                    "Player": st.column_config.TextColumn("Player", width="small"),
+                    "Status": st.column_config.TextColumn(
+                        "Status",
+                        width="small",
+                        help="In or Out"
+                    ),
+                    "RSVP Time": st.column_config.TextColumn("RSVP Time", width="small")
+                },
+                use_container_width=True,
+                hide_index=True
+            )
 
 with tab2:
     st.header("Future Games")
