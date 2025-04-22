@@ -832,7 +832,7 @@ with tab1:
                         "Game": f"{event.name} ({event.begin.format('MM/DD')})",
                         "Player": rsvp['users']['name'].title(),
                         "Status": rsvp['participation'],
-                        "RSVP Time": pd.to_datetime(rsvp['timestamp']).strftime("%m/%d %I:%M %p")
+                        "RSVP Date": pd.to_datetime(rsvp['timestamp']).strftime("%m/%d")
                     })
         
         if all_rsvps:
@@ -847,7 +847,7 @@ with tab1:
                         width="small",
                         help="In or Out"
                     ),
-                    "RSVP Time": st.column_config.TextColumn("RSVP Time", width="small")
+                    "RSVP Date": st.column_config.TextColumn("RSVP Date", width="small")
                 },
                 use_container_width=True,
                 hide_index=True
