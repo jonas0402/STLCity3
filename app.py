@@ -94,6 +94,45 @@ http.mount("http://", adapter)
 # Disable insecure request warnings
 urllib3.disable_warnings()
 
+# --- DATABASE HELPER FUNCTIONS ---
+def save_or_update_game(event):
+    """Save or update game information in the database"""
+    try:
+        # Extract game details
+        game_data = {
+            "event_uid": event.uid,
+            "name": event.name,
+            "start_time": event.begin.datetime.isoformat(),
+            "location": event.location if event.location else "",
+            "opponent": event.name.split("vs")[1].strip() if "vs" in event.name else "",
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Check if game exists
+        response = supabase.table("games").select("event_uid").eq("event_uid", event.uid).execute()
+        
+        if not response.data:
+            # New game, insert it
+            supabase.table("games").insert(game_data).execute()
+        else:
+            # Existing game, update it
+            supabase.table("games").update(game_data).eq("event_uid", event.uid).execute()
+            
+    except Exception as e:
+        st.error(f"Error saving game: {str(e)}")
+
+def update_game_result(event_uid, result_type, score):
+    """Update game result in the database"""
+    try:
+        game_data = {
+            "result": result_type,  # "W" or "L"
+            "score": score,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        supabase.table("games").update(game_data).eq("event_uid", event_uid).execute()
+    except Exception as e:
+        st.error(f"Error updating game result: {str(e)}")
+
 @st.cache_data(ttl=300)  # 5 minute TTL for parsed events
 def parse_calendar_events(calendar_data):
     """Parse calendar data into events (cached separately from raw data)"""
@@ -178,44 +217,6 @@ def save_calendar_cache(data):
         st.warning(f"Cache write error: {str(e)}")
 
 # --- DATABASE HELPER FUNCTIONS ---
-def save_or_update_game(event):
-    """Save or update game information in the database"""
-    try:
-        # Extract game details
-        game_data = {
-            "event_uid": event.uid,
-            "name": event.name,
-            "start_time": event.begin.datetime.isoformat(),
-            "location": event.location if event.location else "",
-            "opponent": event.name.split("vs")[1].strip() if "vs" in event.name else "",
-            "last_updated": datetime.now(timezone.utc).isoformat()
-        }
-        
-        # Check if game exists
-        response = supabase.table("games").select("event_uid").eq("event_uid", event.uid).execute()
-        
-        if not response.data:
-            # New game, insert it
-            supabase.table("games").insert(game_data).execute()
-        else:
-            # Existing game, update it
-            supabase.table("games").update(game_data).eq("event_uid", event.uid).execute()
-            
-    except Exception as e:
-        st.error(f"Error saving game: {str(e)}")
-
-def update_game_result(event_uid, result_type, score):
-    """Update game result in the database"""
-    try:
-        game_data = {
-            "result": result_type,  # "W" or "L"
-            "score": score,
-            "last_updated": datetime.now(timezone.utc).isoformat()
-        }
-        supabase.table("games").update(game_data).eq("event_uid", event_uid).execute()
-    except Exception as e:
-        st.error(f"Error updating game result: {str(e)}")
-
 def get_all_games():
     """Get all games from the database"""
     try:
