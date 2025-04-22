@@ -177,6 +177,10 @@ def get_or_create_user(name):
 def add_rsvp(user_id, event_uid, participation, timestamp):
     """Insert a new RSVP record."""
     try:
+        # First, delete any existing RSVP for this user and event
+        supabase.table("rsvps").delete().eq("user_id", user_id).eq("event_uid", event_uid).execute()
+        
+        # Then add the new RSVP
         supabase.table("rsvps").insert({
             "user_id": user_id,
             "event_uid": event_uid,
@@ -199,8 +203,22 @@ def get_rsvp_counts(event_uid):
 def get_all_rsvps():
     """Return all RSVP records joined with user names."""
     try:
-        response = supabase.table("rsvps").select("rsvps.id, users.name, rsvps.event_uid, rsvps.participation, rsvps.timestamp").join("users", "rsvps.user_id=users.id").execute()
-        return response.data
+        # Use a raw query to join tables since the Python client doesn't support joins directly
+        response = supabase.table("rsvps").select(
+            "rsvps.id, users(name), rsvps.event_uid, rsvps.participation, rsvps.timestamp"
+        ).execute()
+        
+        # Transform the response to match the expected format
+        transformed_data = []
+        for item in response.data:
+            transformed_data.append({
+                'id': item['id'],
+                'name': item['users']['name'],
+                'event_uid': item['event_uid'],
+                'participation': item['participation'],
+                'timestamp': item['timestamp']
+            })
+        return transformed_data
     except Exception as e:
         st.error(f"Error getting all RSVPs: {str(e)}")
         return []
@@ -215,7 +233,15 @@ def delete_rsvp(rsvp_id):
 def get_user_rsvp_for_event(user_name, event_uid):
     """Get a user's RSVP status for a specific event."""
     try:
-        response = supabase.table("rsvps").select("rsvps.id, rsvps.participation").join("users", "rsvps.user_id=users.id").eq("users.name", user_name.lower()).eq("rsvps.event_uid", event_uid).execute()
+        # First get the user ID
+        user_response = supabase.table("users").select("id").eq("name", user_name.lower()).execute()
+        if not user_response.data:
+            return None
+            
+        user_id = user_response.data[0]['id']
+        
+        # Then get the RSVP
+        response = supabase.table("rsvps").select("id, participation").eq("user_id", user_id).eq("event_uid", event_uid).execute()
         return response.data[0] if response.data else None
     except Exception as e:
         st.error(f"Error getting user RSVP: {str(e)}")
@@ -224,8 +250,19 @@ def get_user_rsvp_for_event(user_name, event_uid):
 def get_rsvp_list(event_uid):
     """Get list of users who RSVP'd for an event."""
     try:
-        response = supabase.table("rsvps").select("users.name, rsvps.participation").join("users", "rsvps.user_id=users.id").eq("event_uid", event_uid).order("rsvps.timestamp").execute()
-        return response.data
+        # Use a raw query to join tables since the Python client doesn't support joins directly
+        response = supabase.table("rsvps").select(
+            "users(name), rsvps.participation"
+        ).eq("event_uid", event_uid).execute()
+        
+        # Transform the response to match the expected format
+        transformed_data = []
+        for item in response.data:
+            transformed_data.append({
+                'name': item['users']['name'],
+                'participation': item['participation']
+            })
+        return transformed_data
     except Exception as e:
         st.error(f"Error getting RSVP list: {str(e)}")
         return []
