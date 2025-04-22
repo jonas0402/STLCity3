@@ -20,6 +20,74 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- SUPABASE CONFIGURATION ---
+try:
+    # Try to get credentials from Streamlit secrets
+    supabase = create_client(
+        supabase_url=st.secrets["supabase"]["url"],
+        supabase_key=st.secrets["supabase"]["key"]
+    )
+except Exception as e:
+    st.error("⚠️ Supabase connection failed. Please check your credentials in Streamlit secrets.")
+    st.stop()
+
+# --- DATABASE FUNCTIONS ---
+def save_or_update_game(event):
+    """Save or update game information in the database"""
+    try:
+        # Extract game details
+        game_data = {
+            "event_uid": event.uid,
+            "name": event.name,
+            "start_time": event.begin.datetime.isoformat(),
+            "location": event.location if event.location else "",
+            "opponent": event.name.split("vs")[1].strip() if "vs" in event.name else "",
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Check if game exists
+        response = supabase.table("games").select("event_uid").eq("event_uid", event.uid).execute()
+        
+        if not response.data:
+            # New game, insert it
+            supabase.table("games").insert(game_data).execute()
+        else:
+            # Existing game, update it
+            supabase.table("games").update(game_data).eq("event_uid", event.uid).execute()
+            
+    except Exception as e:
+        st.error(f"Error saving game: {str(e)}")
+
+def update_game_result(event_uid, result_type, score):
+    """Update game result in the database"""
+    try:
+        game_data = {
+            "result": result_type,  # "W" or "L"
+            "score": score,
+            "last_updated": datetime.now(timezone.utc).isoformat()
+        }
+        supabase.table("games").update(game_data).eq("event_uid", event_uid).execute()
+    except Exception as e:
+        st.error(f"Error updating game result: {str(e)}")
+
+def save_game_to_database(event):
+    """Save or update a single game and its result in the database"""
+    try:
+        # Save basic game info
+        save_or_update_game(event)
+        
+        # Check for and save game result if available
+        result = parse_game_result(event.name)
+        if result:
+            result_type = "W" if "Win" in result else "L"
+            score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
+            update_game_result(event.uid, result_type, score)
+            
+        return True
+    except Exception as e:
+        st.error(f"Error saving game {event.name} to database: {str(e)}")
+        return False
+
 # --- CALENDAR CACHE SETTINGS ---
 CACHE_FILE = "calendar_cache.json"
 CACHE_DURATION = 12 * 3600  # 12 hours in seconds
@@ -86,24 +154,6 @@ def fetch_calendar_sync(url):
         return response.text
     except requests.exceptions.RequestException as e:
         raise Exception(f"Failed to fetch calendar: {str(e)}")
-
-def save_game_to_database(event):
-    """Save or update a single game and its result in the database"""
-    try:
-        # Save basic game info
-        save_or_update_game(event)
-        
-        # Check for and save game result if available
-        result = parse_game_result(event.name)
-        if result:
-            result_type = "W" if "Win" in result else "L"
-            score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
-            update_game_result(event.uid, result_type, score)
-            
-        return True
-    except Exception as e:
-        st.error(f"Error saving game {event.name} to database: {str(e)}")
-        return False
 
 @st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
 def get_calendar_events(url):
@@ -185,17 +235,6 @@ def save_calendar_cache(data):
     except Exception as e:
         st.warning(f"Cache write error: {str(e)}")
 
-# --- SUPABASE CONFIGURATION ---
-try:
-    # Try to get credentials from Streamlit secrets
-    supabase = create_client(
-        supabase_url=st.secrets["supabase"]["url"],
-        supabase_key=st.secrets["supabase"]["key"]
-    )
-except Exception as e:
-    st.error("⚠️ Supabase connection failed. Please check your credentials in Streamlit secrets.")
-    st.stop()
-
 # --- DATABASE VERIFICATION ---
 def verify_database_setup():
     """Verify that the required tables exist"""
@@ -222,44 +261,6 @@ ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb9
 events = get_calendar_events_no_cache(ical_url)  # Use non-cached version on first load
 
 # --- HELPER FUNCTIONS ---
-
-def save_or_update_game(event):
-    """Save or update game information in the database"""
-    try:
-        # Extract game details
-        game_data = {
-            "event_uid": event.uid,
-            "name": event.name,
-            "start_time": event.begin.datetime.isoformat(),
-            "location": event.location if event.location else "",
-            "opponent": event.name.split("vs")[1].strip() if "vs" in event.name else "",
-            "last_updated": datetime.now(timezone.utc).isoformat()
-        }
-        
-        # Check if game exists
-        response = supabase.table("games").select("event_uid").eq("event_uid", event.uid).execute()
-        
-        if not response.data:
-            # New game, insert it
-            supabase.table("games").insert(game_data).execute()
-        else:
-            # Existing game, update it
-            supabase.table("games").update(game_data).eq("event_uid", event.uid).execute()
-            
-    except Exception as e:
-        st.error(f"Error saving game: {str(e)}")
-
-def update_game_result(event_uid, result_type, score):
-    """Update game result in the database"""
-    try:
-        game_data = {
-            "result": result_type,  # "W" or "L"
-            "score": score,
-            "last_updated": datetime.now(timezone.utc).isoformat()
-        }
-        supabase.table("games").update(game_data).eq("event_uid", event_uid).execute()
-    except Exception as e:
-        st.error(f"Error updating game result: {str(e)}")
 
 # --- DATABASE HELPER FUNCTIONS ---
 def get_all_games():
