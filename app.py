@@ -12,6 +12,52 @@ from pathlib import Path
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
+import base64
+
+# Function to load and encode the background image
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, 'rb') as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+def set_background():
+    bin_str = get_base64_of_bin_file('citypark.png')
+    page_bg_img = f'''
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{bin_str}");
+        background-size: cover;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    .stApp > header {{
+        background-color: transparent;
+    }}
+    div[data-testid="stToolbar"] {{
+        background-color: transparent;
+    }}
+    section[data-testid="stSidebar"] {{
+        background-color: rgba(255, 255, 255, 0.9);
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+    }}
+    .stTabs [data-baseweb="tab-panel"] {{
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
+        padding: 15px;
+    }}
+    [data-testid="stExpander"] {{
+        background-color: rgba(255, 255, 255, 0.9) !important;
+        border-radius: 8px;
+    }}
+    [data-testid="stMarkdownContainer"] {{
+        color: rgb(49, 51, 63) !important;
+    }}
+    </style>
+    '''
+    st.markdown(page_bg_img, unsafe_allow_html=True)
 
 # Must be the first Streamlit command
 st.set_page_config(
@@ -19,6 +65,9 @@ st.set_page_config(
     page_icon="⚽",
     layout="wide"
 )
+
+# Set the background image
+set_background()
 
 # --- SUPABASE CONFIGURATION ---
 try:
