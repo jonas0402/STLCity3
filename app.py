@@ -1,10 +1,11 @@
 import streamlit as st
+import base64
+from datetime import datetime, timezone, date, timedelta
 from supabase import create_client
 from dotenv import load_dotenv
 import os
 import requests
 from ics import Calendar
-from datetime import datetime, timezone, date, timedelta
 import pandas as pd
 import json
 import time
@@ -12,62 +13,69 @@ from pathlib import Path
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
-import base64
 
-# Function to load and encode the background image
-def get_base64_of_bin_file(bin_file):
-    with open(bin_file, 'rb') as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
+# --- SESSION MANAGEMENT ---
+def init_session_state():
+    """Initialize session state variables"""
+    if 'user_name' not in st.session_state:
+        # Check for existing cookie
+        if 'stUserName' in st.experimental_get_cookie():
+            cookie_data = st.experimental_get_cookie('stUserName')
+            if isinstance(cookie_data, dict):
+                user_name = cookie_data.get('name')
+                expiry = cookie_data.get('expiry')
+                if user_name and expiry:
+                    # Check if cookie is still valid
+                    if datetime.fromisoformat(expiry) > datetime.now():
+                        st.session_state.user_name = user_name
+                        return
+        st.session_state.user_name = None
 
-def set_background():
-    bin_str = get_base64_of_bin_file('citypark.png')
-    page_bg_img = f'''
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{bin_str}");
-        background-size: cover;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    .stApp > header {{
-        background-color: transparent;
-    }}
-    div[data-testid="stToolbar"] {{
-        background-color: transparent;
-    }}
-    section[data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.9);
-    }}
-    .stTabs [data-baseweb="tab-list"] {{
-        background-color: rgba(255, 255, 255, 0.9);
-        border-radius: 8px;
-    }}
-    .stTabs [data-baseweb="tab-panel"] {{
-        background-color: rgba(255, 255, 255, 0.9);
-        border-radius: 8px;
-        padding: 15px;
-    }}
-    [data-testid="stExpander"] {{
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        border-radius: 8px;
-    }}
-    [data-testid="stMarkdownContainer"] {{
-        color: rgb(49, 51, 63) !important;
-    }}
-    </style>
-    '''
-    st.markdown(page_bg_img, unsafe_allow_html=True)
+def set_user_cookie(user_name):
+    """Set a cookie with user information and 24-hour expiration"""
+    expiry = (datetime.now() + timedelta(days=1)).isoformat()
+    cookie_data = {
+        'name': user_name,
+        'expiry': expiry
+    }
+    st.experimental_set_cookie('stUserName', cookie_data)
 
-# Must be the first Streamlit command
+def clear_user_cookie():
+    """Clear the user cookie on logout"""
+    st.experimental_set_cookie('stUserName', None)
+
+# Initialize session state at startup
+init_session_state()
+
+def get_background_style():
+    try:
+        with open('citypark.png', 'rb') as f:
+            data = f.read()
+            encoded = base64.b64encode(data).decode()
+            return f'''
+                <style>
+                    .stApp {{
+                        background-image: url(data:image/png;base64,{encoded});
+                        background-size: cover;
+                        background-position: center;
+                        background-attachment: fixed;
+                    }}
+                </style>
+            '''
+    except Exception as e:
+        return None
+
+# Apply background style before any other Streamlit commands
+background_style = get_background_style()
+if background_style:
+    st.markdown(background_style, unsafe_allow_html=True)
+
+# Now set the page config
 st.set_page_config(
     page_title="STL City 3 Game Participation",
     page_icon="⚽",
     layout="wide"
 )
-
-# Set the background image
-set_background()
 
 # --- SUPABASE CONFIGURATION ---
 try:
@@ -339,20 +347,33 @@ def get_all_games():
         st.error(f"Error getting games: {str(e)}")
         return []
 
-# --- SESSION STATE MANAGEMENT ---
-if 'user_name' not in st.session_state:
-    st.session_state.user_name = None
-
 # --- USER AUTHENTICATION ---
-def authenticate_user():
-    if st.session_state.user_name is None:
-        with st.sidebar:
-            st.title("Login")
-            name = st.text_input("Enter your name to RSVP:")
+if not st.session_state.user_name:
+    st.info("👋 Welcome! Please login to RSVP for games")
+    
+    # Create a centered container for login
+    with st.container():
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.subheader("🔑 Login")
+            name = st.text_input("Enter your name:", placeholder="Your name here")
             if name:
                 st.session_state.user_name = name
-                return name
-    return st.session_state.user_name
+                set_user_cookie(name)
+                st.rerun()
+    
+    # Early return if not logged in
+    st.warning("⚠️ You must login to view games and RSVP")
+    st.stop()
+
+# Show active user status in main area for mobile
+st.success(f"👤 Logged in as: {st.session_state.user_name}")
+
+# Add logout button in main content
+if st.button("📱 Logout", type="secondary"):
+    clear_user_cookie()
+    st.session_state.user_name = None
+    st.rerun()
 
 # --- DATABASE HELPER FUNCTIONS ---
 def get_or_create_user(name):
@@ -816,37 +837,6 @@ with col1:
         st.image("logo.png", width=68, use_container_width=False)  # Set fixed dimensions
 with col2:
     st.title("STL City 3 Game Participation")
-
-# Show login form in main content area for mobile users if not logged in
-if not st.session_state.user_name:
-    st.info("👋 Welcome! Please login to RSVP for games")
-    
-    # Create a centered container for login
-    with st.container():
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            st.subheader("🔑 Login")
-            name = st.text_input("Enter your name:", placeholder="Your name here")
-            if name:
-                st.session_state.user_name = name
-                st.rerun()
-    
-    # Early return if not logged in
-    st.warning("⚠️ You must login to view games and RSVP")
-    st.stop()
-
-# Show active user status in main area for mobile
-st.success(f"👤 Logged in as: {st.session_state.user_name}")
-
-# Add logout button in main content
-if st.button("📱 Logout", type="secondary"):
-    st.session_state.user_name = None
-    st.rerun()
-
-# Remove duplicate login from sidebar since it's now in main content
-with st.sidebar:
-    if st.session_state.user_name:
-        st.success(f"Logged in as: {st.session_state.user_name}")
 
 # Main tabs for different views
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["This Week", "Future Games", "Past Games", "My RSVPs", "Statistics"])
