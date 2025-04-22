@@ -24,13 +24,13 @@ st.set_page_config(
 def get_cookie(key):
     """Get cookie value"""
     try:
-        return st.experimental_get_query_params()[key][0]
+        return st.query_params[key][0]  # ✅ updated from experimental
     except:
         return None
 
 def set_cookie(key, value):
     """Set cookie value"""
-    st.experimental_set_query_params(**{key: value})
+    st.query_params = {key: value}  # ✅ updated from experimental
 
 # Initialize authentication
 username = get_cookie('username')
