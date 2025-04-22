@@ -71,6 +71,28 @@ http.mount("http://", adapter)
 # Disable insecure request warnings
 urllib3.disable_warnings()
 
+def parse_game_result(event_name):
+    """Parse the game result from the event name if available"""
+    if "L" in event_name and "vs" in event_name:
+        try:
+            # Extract score like "L 3-5"
+            result_part = event_name.split("vs")[0]
+            if "L" in result_part:
+                score = result_part.split("L")[1].strip()
+                return f"Loss {score}"
+        except:
+            pass
+    elif "W" in event_name and "vs" in event_name:
+        try:
+            # Extract score like "W 3-5"
+            result_part = event_name.split("vs")[0]
+            if "W" in result_part:
+                score = result_part.split("W")[1].strip()
+                return f"Win {score}"
+        except:
+            pass
+    return None
+
 @st.cache_data(ttl=300)  # 5 minute TTL for parsed events
 def parse_calendar_events(calendar_data):
     """Parse calendar data into events (cached separately from raw data)"""
@@ -667,28 +689,6 @@ def display_future_events(events):
                     st.write("No one yet")
             else:
                 st.write("No RSVPs yet")
-
-def parse_game_result(event_name):
-    """Parse the game result from the event name if available"""
-    if "L" in event_name and "vs" in event_name:
-        try:
-            # Extract score like "L 3-5"
-            result_part = event_name.split("vs")[0]
-            if "L" in result_part:
-                score = result_part.split("L")[1].strip()
-                return f"Loss {score}"
-        except:
-            pass
-    elif "W" in event_name and "vs" in event_name:
-        try:
-            # Extract score like "W 3-5"
-            result_part = event_name.split("vs")[0]
-            if "W" in result_part:
-                score = result_part.split("W")[1].strip()
-                return f"Win {score}"
-        except:
-            pass
-    return None
 
 # --- SETUP CALENDAR VIEW ---
 today = date.today()
