@@ -13,28 +13,60 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
 
-# --- SESSION MANAGEMENT ---
-if 'authentication_status' not in st.session_state:
-    st.session_state['authentication_status'] = None
-    
-if 'user_name' not in st.session_state:
-    st.session_state['user_name'] = None
-
-# --- USER AUTHENTICATION ---
-def authenticate_user(username):
-    st.session_state['authentication_status'] = True
-    st.session_state['user_name'] = username
-
-def logout_user():
-    st.session_state['authentication_status'] = None
-    st.session_state['user_name'] = None
-
 # Must be the first Streamlit command
 st.set_page_config(
     page_title="STL City 3 Game Participation",
     page_icon="⚽",
     layout="wide"
 )
+
+# --- USER AUTHENTICATION ---
+def get_cookie(key):
+    """Get cookie value"""
+    try:
+        return st.experimental_get_query_params()[key][0]
+    except:
+        return None
+
+def set_cookie(key, value):
+    """Set cookie value"""
+    st.experimental_set_query_params(**{key: value})
+
+# Initialize authentication
+username = get_cookie('username')
+if username:
+    st.session_state['user_name'] = username
+    st.session_state['authentication_status'] = True
+elif 'authentication_status' not in st.session_state:
+    st.session_state['authentication_status'] = False
+    st.session_state['user_name'] = None
+
+if not st.session_state['authentication_status']:
+    st.info("👋 Welcome! Please login to RSVP for games")
+    
+    with st.container():
+        col1, col2, col3 = st.columns([1,2,1])
+        with col2:
+            st.subheader("🔑 Login")
+            name = st.text_input("Enter your name:", placeholder="Your name here")
+            if name:
+                st.session_state['user_name'] = name
+                st.session_state['authentication_status'] = True
+                set_cookie('username', name)
+                st.rerun()
+    
+    st.warning("⚠️ You must login to view games and RSVP")
+    st.stop()
+
+# Show active user status
+st.success(f"👤 Logged in as: {st.session_state.user_name}")
+
+# Logout button
+if st.button("📱 Logout", type="secondary"):
+    st.session_state['user_name'] = None
+    st.session_state['authentication_status'] = False
+    set_cookie('username', '')
+    st.rerun()
 
 # --- SUPABASE CONFIGURATION ---
 try:
@@ -306,33 +338,6 @@ def get_all_games():
         st.error(f"Error getting games: {str(e)}")
         return []
 
-# --- USER AUTHENTICATION ---
-# Check if user is already authenticated
-if not st.session_state['authentication_status']:
-    st.info("👋 Welcome! Please login to RSVP for games")
-    
-    # Create a centered container for login
-    with st.container():
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            st.subheader("🔑 Login")
-            name = st.text_input("Enter your name:", placeholder="Your name here")
-            if name:
-                authenticate_user(name)
-                st.rerun()
-    
-    # Early return if not logged in
-    st.warning("⚠️ You must login to view games and RSVP")
-    st.stop()
-
-# Show active user status in main area for mobile
-st.success(f"👤 Logged in as: {st.session_state.user_name}")
-
-# Update the logout button to use the logout function
-if st.button("📱 Logout", type="secondary"):
-    logout_user()
-    st.rerun()
-
 # --- DATABASE HELPER FUNCTIONS ---
 def get_or_create_user(name):
     """Get user id for given name; if not found, create the user."""
@@ -497,9 +502,9 @@ def get_opponent_stats():
         for game in games:
             opponent = game['opponent']
             if opponent not in opponent_stats:
-                opponent_stats[opponent] = {'games': 0, 'wins': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0}
+                opponent_stats = {'games': 0, 'wins': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0}
             
-            stats = opponent_stats[opponent]
+            stats = opponent_stats
             stats['games'] += 1
             
             if game['result'] == 'W':
