@@ -250,10 +250,10 @@ def get_user_rsvp_for_event(user_name, event_uid):
 def get_rsvp_list(event_uid):
     """Get list of users who RSVP'd for an event."""
     try:
-        # Use a raw query to join tables since the Python client doesn't support joins directly
+        # Use foreign key expansion with proper Supabase syntax
         response = supabase.table("rsvps").select(
-            "users(name), rsvps.participation"
-        ).eq("event_uid", event_uid).execute()
+            "users:user_id(name), participation"
+        ).eq("event_uid", event_uid).order("timestamp").execute()
         
         # Transform the response to match the expected format
         transformed_data = []
@@ -392,16 +392,16 @@ def display_week_calendar(start_date, events):
                     rsvps = get_rsvp_list(event.uid)
                     if rsvps:
                         st.write("✅ In:")
-                        in_players = [name for name, status in rsvps if status == "In"]
+                        in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
                         if in_players:
-                            st.write(", ".join(in_players))
+                            st.write(", ".join(sorted(in_players)))
                         else:
                             st.write("No one yet")
                             
                         st.write("❌ Out:")
-                        out_players = [name for name, status in rsvps if status == "Out"]
+                        out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
                         if out_players:
-                            st.write(", ".join(out_players))
+                            st.write(", ".join(sorted(out_players)))
                         else:
                             st.write("No one yet")
                     else:
@@ -438,16 +438,16 @@ def display_future_events(events):
             rsvps = get_rsvp_list(event.uid)
             if rsvps:
                 st.write("✅ In:")
-                in_players = [name for name, status in rsvps if status == "In"]
+                in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
                 if in_players:
-                    st.write(", ".join(in_players))
+                    st.write(", ".join(sorted(in_players)))
                 else:
                     st.write("No one yet")
                     
                 st.write("❌ Out:")
-                out_players = [name for name, status in rsvps if status == "Out"]
+                out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
                 if out_players:
-                    st.write(", ".join(out_players))
+                    st.write(", ".join(sorted(out_players)))
                 else:
                     st.write("No one yet")
             else:
@@ -593,7 +593,7 @@ with tab3:
                     col1, col2 = st.columns(2)
                     with col1:
                         st.write("✅ **Played:**")
-                        in_players = [name for name, status in rsvps if status == "In"]
+                        in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
                         if in_players:
                             st.write(", ".join(sorted(in_players)))
                         else:
@@ -601,7 +601,7 @@ with tab3:
                     
                     with col2:
                         st.write("❌ **Declined:**")
-                        out_players = [name for name, status in rsvps if status == "Out"]
+                        out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
                         if out_players:
                             st.write(", ".join(sorted(out_players)))
                         else:
