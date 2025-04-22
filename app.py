@@ -31,6 +31,24 @@ except Exception as e:
     st.error("⚠️ Supabase connection failed. Please check your credentials in Streamlit secrets.")
     st.stop()
 
+# --- ANNOUNCEMENTS ---
+def show_temporary_announcement():
+    """Show a temporary announcement that expires after a set date"""
+    expiration_date = date(2025, 4, 28)  # One week from April 21, 2025
+    if date.today() <= expiration_date:
+        st.warning("""
+        🔄 **Database Update Notice** 🔄
+        
+        We've recently fixed a database issue that was affecting game RSVPs. The system is now using a persistent database.
+        
+        ⚠️ **Action Required**: If you RSVP'd (In/Out) for any games last week, please RSVP again.
+        
+        Thank you for your understanding!
+        """)
+
+# Show announcement at the very top of the page
+show_temporary_announcement()
+
 # --- DATABASE FUNCTIONS ---
 def save_or_update_game(event):
     """Save or update game information in the database"""
