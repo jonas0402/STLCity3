@@ -97,6 +97,19 @@ def get_calendar_events(url):
             # Save to cache file for backup
             save_calendar_cache(calendar_data)
             events = parse_calendar_events(calendar_data)
+            
+            # Save each event to the database
+            for event in events:
+                # Save basic game info
+                save_or_update_game(event)
+                
+                # Check for and save game result if available
+                result = parse_game_result(event.name)
+                if result:
+                    result_type = "W" if "Win" in result else "L"
+                    score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
+                    update_game_result(event.uid, result_type, score)
+            
             return events
     except Exception as e:
         st.error(f"Failed to fetch fresh calendar data: {str(e)}")
