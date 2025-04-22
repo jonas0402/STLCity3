@@ -13,12 +13,39 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
 
+# --- ANNOUNCEMENTS ---
+def show_temporary_announcement():
+    """Show a temporary announcement that expires after a set date"""
+    expiration_date = date(2025, 4, 28)  # One week from April 21, 2025
+    if date.today() <= expiration_date:
+        st.warning("""
+        🔄 **Database Update Notice** 🔄
+        
+        We've recently fixed a database issue that was affecting game RSVPs. The system is now using a persistent database.
+        
+        ⚠️ **Action Required**: If you RSVP'd (In/Out) for any games last week, please RSVP again.
+        
+        Thank you for your understanding!
+        """)
+
 # Must be the first Streamlit command
 st.set_page_config(
     page_title="STL City 3 Game Participation",
     page_icon="⚽",
     layout="wide"
 )
+
+# Show announcement before login (moved here)
+show_temporary_announcement()
+
+# Add logo and title in a row with better proportions
+col1, col2 = st.columns([1, 6])  # Adjusted ratio for better spacing
+with col1:
+    # Use a container for consistent padding and alignment
+    with st.container():
+        st.image("logo.png", width=68, use_container_width=False)  # Set fixed dimensions
+with col2:
+    st.title("STL City 3 Game Participation")
 
 # --- USER AUTHENTICATION ---
 def get_cookie(key):
@@ -80,24 +107,6 @@ try:
 except Exception as e:
     st.error("⚠️ Supabase connection failed. Please check your credentials in Streamlit secrets.")
     st.stop()
-
-# --- ANNOUNCEMENTS ---
-def show_temporary_announcement():
-    """Show a temporary announcement that expires after a set date"""
-    expiration_date = date(2025, 4, 28)  # One week from April 21, 2025
-    if date.today() <= expiration_date:
-        st.warning("""
-        🔄 **Database Update Notice** 🔄
-        
-        We've recently fixed a database issue that was affecting game RSVPs. The system is now using a persistent database.
-        
-        ⚠️ **Action Required**: If you RSVP'd (In/Out) for any games last week, please RSVP again.
-        
-        Thank you for your understanding!
-        """)
-
-# Show announcement at the very top of the page
-show_temporary_announcement()
 
 # --- DATABASE FUNCTIONS ---
 def save_or_update_game(event):
@@ -793,15 +802,6 @@ future_events.sort(key=lambda e: e.begin.datetime)
 past_events.sort(key=lambda e: e.begin.datetime, reverse=True)  # Most recent first
 
 # --- STREAMLIT APP LAYOUT ---
-
-# Add logo and title in a row with better proportions
-col1, col2 = st.columns([1, 6])  # Adjusted ratio for better spacing
-with col1:
-    # Use a container for consistent padding and alignment
-    with st.container():
-        st.image("logo.png", width=68, use_container_width=False)  # Set fixed dimensions
-with col2:
-    st.title("STL City 3 Game Participation")
 
 # Main tabs for different views
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["This Week", "Future Games", "Past Games", "My RSVPs", "Statistics"])
