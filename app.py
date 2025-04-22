@@ -30,7 +30,9 @@ def get_cookie(key):
 
 def set_cookie(key, value):
     """Set cookie value"""
-    st.query_params = {key: value}  # ✅ updated from experimental
+    current_params = st.query_params
+    current_params[key] = value
+    st.query_params = current_params
 
 # Initialize authentication
 username = get_cookie('username')
