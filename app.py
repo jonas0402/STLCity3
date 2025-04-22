@@ -18,34 +18,17 @@ import urllib3
 def init_session_state():
     """Initialize session state variables"""
     if 'user_name' not in st.session_state:
-        # Check for existing cookie
-        if 'stUserName' in st.experimental_get_cookie():
-            cookie_data = st.experimental_get_cookie('stUserName')
-            if isinstance(cookie_data, dict):
-                user_name = cookie_data.get('name')
-                expiry = cookie_data.get('expiry')
-                if user_name and expiry:
-                    # Check if cookie is still valid
-                    if datetime.fromisoformat(expiry) > datetime.now():
-                        st.session_state.user_name = user_name
-                        return
         st.session_state.user_name = None
-
-def set_user_cookie(user_name):
-    """Set a cookie with user information and 24-hour expiration"""
-    expiry = (datetime.now() + timedelta(days=1)).isoformat()
-    cookie_data = {
-        'name': user_name,
-        'expiry': expiry
-    }
-    st.experimental_set_cookie('stUserName', cookie_data)
-
-def clear_user_cookie():
-    """Clear the user cookie on logout"""
-    st.experimental_set_cookie('stUserName', None)
 
 # Initialize session state at startup
 init_session_state()
+
+# Must be the first Streamlit command
+st.set_page_config(
+    page_title="STL City 3 Game Participation",
+    page_icon="⚽",
+    layout="wide"
+)
 
 def get_background_style():
     try:
@@ -69,13 +52,6 @@ def get_background_style():
 background_style = get_background_style()
 if background_style:
     st.markdown(background_style, unsafe_allow_html=True)
-
-# Now set the page config
-st.set_page_config(
-    page_title="STL City 3 Game Participation",
-    page_icon="⚽",
-    layout="wide"
-)
 
 # --- SUPABASE CONFIGURATION ---
 try:
@@ -359,7 +335,6 @@ if not st.session_state.user_name:
             name = st.text_input("Enter your name:", placeholder="Your name here")
             if name:
                 st.session_state.user_name = name
-                set_user_cookie(name)
                 st.rerun()
     
     # Early return if not logged in
@@ -371,7 +346,6 @@ st.success(f"👤 Logged in as: {st.session_state.user_name}")
 
 # Add logout button in main content
 if st.button("📱 Logout", type="secondary"):
-    clear_user_cookie()
     st.session_state.user_name = None
     st.rerun()
 
