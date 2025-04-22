@@ -4,3 +4,5 @@ ics>=0.7.2
 pandas>=2.0.0
 python-dateutil>=2.8.2
 httpx>=0.24.0
+supabase>=2.3.0
+python-dotenv>=1.0.0
