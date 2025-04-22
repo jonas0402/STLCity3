@@ -87,6 +87,24 @@ def fetch_calendar_sync(url):
     except requests.exceptions.RequestException as e:
         raise Exception(f"Failed to fetch calendar: {str(e)}")
 
+def save_game_to_database(event):
+    """Save or update a single game and its result in the database"""
+    try:
+        # Save basic game info
+        save_or_update_game(event)
+        
+        # Check for and save game result if available
+        result = parse_game_result(event.name)
+        if result:
+            result_type = "W" if "Win" in result else "L"
+            score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
+            update_game_result(event.uid, result_type, score)
+            
+        return True
+    except Exception as e:
+        st.error(f"Error saving game {event.name} to database: {str(e)}")
+        return False
+
 @st.cache_data(ttl=CACHE_DURATION, show_spinner=False)
 def get_calendar_events(url):
     """Fetch calendar events and save to database"""
@@ -98,17 +116,9 @@ def get_calendar_events(url):
             save_calendar_cache(calendar_data)
             events = parse_calendar_events(calendar_data)
             
-            # Save each event to the database
+            # Save all events to database
             for event in events:
-                # Save basic game info
-                save_or_update_game(event)
-                
-                # Check for and save game result if available
-                result = parse_game_result(event.name)
-                if result:
-                    result_type = "W" if "Win" in result else "L"
-                    score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
-                    update_game_result(event.uid, result_type, score)
+                save_game_to_database(event)
             
             return events
     except Exception as e:
@@ -118,7 +128,11 @@ def get_calendar_events(url):
         cached_data, _ = load_calendar_cache()
         if cached_data:
             st.warning("Using cached data while server is unavailable")
-            return parse_calendar_events(cached_data)
+            events = parse_calendar_events(cached_data)
+            # Even with cached data, ensure games are saved to database
+            for event in events:
+                save_game_to_database(event)
+            return events
         
         # If everything fails, return empty list
         return []
@@ -131,17 +145,9 @@ def get_calendar_events_no_cache(url):
             save_calendar_cache(calendar_data)
             events = parse_calendar_events(calendar_data)
             
-            # Save each event to the database
+            # Save all events to database
             for event in events:
-                # Save basic game info
-                save_or_update_game(event)
-                
-                # Check for and save game result if available
-                result = parse_game_result(event.name)
-                if result:
-                    result_type = "W" if "Win" in result else "L"
-                    score = result.split(" ")[1] if len(result.split(" ")) > 1 else ""
-                    update_game_result(event.uid, result_type, score)
+                save_game_to_database(event)
             
             return events
     except Exception as e:
@@ -149,7 +155,11 @@ def get_calendar_events_no_cache(url):
         cached_data, _ = load_calendar_cache()
         if cached_data:
             st.warning("Using cached data while server is unavailable")
-            return parse_calendar_events(cached_data)
+            events = parse_calendar_events(cached_data)
+            # Even with cached data, ensure games are saved to database
+            for event in events:
+                save_game_to_database(event)
+            return events
     return []
 
 def load_calendar_cache():
@@ -174,10 +184,6 @@ def save_calendar_cache(data):
             json.dump(cache, f)
     except Exception as e:
         st.warning(f"Cache write error: {str(e)}")
-
-# Keep existing calendar URL and fetch events right away
-ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
-events = get_calendar_events_no_cache(ical_url)  # Use non-cached version on first load
 
 # --- SUPABASE CONFIGURATION ---
 try:
@@ -210,6 +216,10 @@ def verify_database_setup():
 # Verify database setup
 if not verify_database_setup():
     st.stop()
+
+# Now fetch calendar events after database is ready
+ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
+events = get_calendar_events_no_cache(ical_url)  # Use non-cached version on first load
 
 # --- HELPER FUNCTIONS ---
 
