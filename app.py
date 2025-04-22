@@ -443,9 +443,9 @@ def get_season_stats():
 def get_opponent_stats():
     """Get statistics broken down by opponent"""
     try:
-        # Get all games with results and opponents
-        response = supabase.table("games").select("*").not_.is_("result", "null").not_.is_("opponent", "").execute()
-        games = response.data
+        # Get all games with results
+        response = supabase.table("games").select("*").execute()
+        games = [g for g in response.data if g['result'] and g['opponent']]
         
         opponent_stats = {}
         for game in games:
@@ -507,44 +507,34 @@ def display_season_stats():
     # Recent Form
     st.subheader("Recent Form")
     recent_games = stats['games'][-5:]  # Last 5 games
-    form_cols = st.columns(min(5, len(recent_games)))
-    for i, game in enumerate(recent_games):
-        with form_cols[i]:
-            if game['result'] == 'W':
-                st.success("W")
-            else:
-                st.error("L")
-            if game['score']:
-                st.caption(f"{game['score']}")
-            st.caption(f"vs {game['opponent']}")
-    
-    # Opponent Analysis
-    st.subheader("Opponent Analysis")
-    opponent_stats = get_opponent_stats()
-    if opponent_stats:
-        # Convert to DataFrame for better display
-        records = []
-        for opponent, stats in opponent_stats.items():
-            win_pct = (stats['wins'] / stats['games'] * 100) if stats['games'] > 0 else 0
-            records.append({
-                'Opponent': opponent,
-                'Games': stats['games'],
-                'Wins': stats['wins'],
-                'Losses': stats['losses'],
-                'Win %': f"{win_pct:.1f}%",
-                'GF': stats['goals_for'],
-                'GA': stats['goals_against'],
-                'GD': stats['goals_for'] - stats['goals_against']
+    if recent_games:
+        form_cols = st.columns(min(5, len(recent_games)))
+        for i, game in enumerate(recent_games):
+            with form_cols[i]:
+                if game['result'] == 'W':
+                    st.success("W")
+                else:
+                    st.error("L")
+                if game['score']:
+                    st.caption(f"{game['score']}")
+                if game['opponent']:
+                    st.caption(f"vs {game['opponent']}")
+
+    # Game History
+    if stats['games']:
+        st.subheader("Game History")
+        game_records = []
+        for game in stats['games']:
+            game_records.append({
+                'Date': game['start_time'].split('T')[0],
+                'Opponent': game['opponent'],
+                'Result': game['result'],
+                'Score': game['score'] if game['score'] else '-'
             })
         
-        if records:
-            df = pd.DataFrame(records)
-            st.dataframe(df.set_index('Opponent'), use_container_width=True)
-            
-            # Visualization
-            fig_data = pd.DataFrame(records)
-            fig_data['Win %'] = fig_data['Win %'].str.rstrip('%').astype(float)
-            st.bar_chart(data=fig_data.set_index('Opponent')['Win %'])
+        if game_records:
+            df = pd.DataFrame(game_records)
+            st.dataframe(df.set_index('Date'), use_container_width=True)
 
 # --- DISPLAY FUNCTIONS ---
 def display_attendance_status(in_count):
