@@ -717,12 +717,10 @@ def display_week_calendar(start_date, events):
                 event_time = event.begin.format("h:mm A")
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
-
-                # Show clickable location
                 if event.location:
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={event.location.replace(' ', '+')}"
-                    st.markdown(f"[📍 {event.location}]({maps_url})")
-                
+                    st.write(f"[📍 {event.location}]({maps_url})")
+
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
                 
