@@ -765,7 +765,7 @@ def display_future_events(events):
         
     events_sorted = sorted(events, key=lambda e: e.begin.date())
     for event in events_sorted:
-        with st.expander(f"{event.begin.date()} {event.begin.format('HH:mm')} - {event.name}"):
+        with st.expander(f"{event.begin.date()} {event.begin.format('h:mm A')} - {clean_game_name(event.name)}"):
 
             in_count, out_count = get_rsvp_counts(event.uid)
             
