@@ -737,25 +737,32 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
                 if event.location:
-                    cleaned_location = clean_location(event.location)  # 👈 variable "cleaned_location", function "clean_location"
-                    
-                    google_maps_url = f"https://www.google.com/maps/search/?api=1&query={cleaned_location.replace(' ', '+')}"
-                    apple_maps_url = f"https://maps.apple.com/?q={cleaned_location.replace(' ', '+')}"
+                    field, address = clean_location(event.location)
 
-                    st.markdown(f"""
-                        <div style="display: flex; gap: 10px;">
-                            <a href="{google_maps_url}" target="_blank">
-                                <button style="background-color: #4285F4; color: white; padding: 8px 16px; border: none; border-radius: 5px;">
-                                    Open in Google Maps
-                                </button>
-                            </a>
-                            <a href="{apple_maps_url}" target="_blank">
-                                <button style="background-color: #000000; color: white; padding: 8px 16px; border: none; border-radius: 5px;">
-                                    Open in Apple Maps
-                                </button>
-                            </a>
-                        </div>
-                    """, unsafe_allow_html=True)
+                    if field:
+                        st.write(f"🏟️ Field: {field}")
+
+                    if address:
+                        maps_query = address.replace(' ', '+')
+                        google_maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
+                        apple_maps_url = f"https://maps.apple.com/?q={maps_query}"
+
+                        st.markdown(f"""
+                            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                                <a href="{google_maps_url}" target="_blank">
+                                    <button style="background-color: #4285F4; color: white; padding: 6px 12px; border: none; border-radius: 5px;">
+                                        Google Maps
+                                    </button>
+                                </a>
+                                <a href="{apple_maps_url}" target="_blank">
+                                    <button style="background-color: #000000; color: white; padding: 6px 12px; border: none; border-radius: 5px;">
+                                        Apple Maps
+                                    </button>
+                                </a>
+                            </div>
+                        """, unsafe_allow_html=True)
+
+
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
