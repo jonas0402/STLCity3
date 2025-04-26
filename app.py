@@ -203,19 +203,21 @@ def clean_game_name(name):
     return name
 
 def clean_location(location):
-    """Cleans location: splits field and address cleanly."""
+    """Smart clean: separate field and address properly."""
     prefix = "Soccerdome (Webster Groves) on "
     if location.startswith(prefix):
         location = location[len(prefix):]
 
-    # Find the first full address pattern (start with a number)
-    match = re.search(r'(\d+ .+)', location)
-    if match:
-        address = match.group(1).strip()
-        field = location.replace(address, "").strip().strip("-").strip()
+    # Try to find where 'Soccer Park Rd' starts
+    split_keyword = "Soccer Park Rd"
+    idx = location.find(split_keyword)
+    
+    if idx != -1:
+        field = location[:idx].strip("- ").strip()
+        address = location[idx-2:].strip()  # take two characters before for "1 " in "1 Soccer Park Rd"
         return field, address
     else:
-        # fallback if no address detected
+        # fallback: no keyword found
         return location.strip(), None
 
 # Define parse_game_result locally to avoid import issues
