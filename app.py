@@ -7,6 +7,7 @@ from ics import Calendar
 from datetime import datetime, timezone, date, timedelta
 import pandas as pd
 import json
+import re
 import time
 from pathlib import Path
 from requests.adapters import HTTPAdapter
@@ -202,11 +203,21 @@ def clean_game_name(name):
     return name
 
 def clean_location(location):
-    """Remove 'Soccerdome (Webster Groves) on ' from location."""
+    """Cleans location: splits field vs address, returns address part."""
     prefix = "Soccerdome (Webster Groves) on "
-    if location and location.startswith(prefix):
-        return location[len(prefix):]
-    return location
+    if location.startswith(prefix):
+        location = location[len(prefix):]
+    
+    # Smart split using regex
+    match = re.search(r'(\d+ .+)', location)
+    if match:
+        address_start = match.start()
+        field = location[:address_start].strip()
+        address = location[address_start:].strip()
+        return field, address
+    else:
+        # No number found → fallback
+        return location.strip(), None
 
 # Define parse_game_result locally to avoid import issues
 def parse_game_result(event_name):
@@ -725,9 +736,12 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
                 if event.location:
-                    cleaned_location = clean_location(event.location)
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={cleaned_location.replace(' ', '+')}"
-                    st.markdown(f"[📍 {cleaned_location}]({maps_url})")
+                    field, address = clean_location(event.location)
+                    if field:
+                        st.write(f"🏟️ Field: {field}")
+                    if address:
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={address.replace(' ', '+')}"
+                        st.write(f"[📍 {address}]({maps_url})", unsafe_allow_html=True)
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
