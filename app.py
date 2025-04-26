@@ -67,7 +67,6 @@ def set_cookie(key, value):
 
 # Initialize authentication
 username = get_cookie('username')
-st.write(f"DEBUG - Username from cookie: {username}")
 if username:
     st.session_state['user_name'] = username
     st.session_state['authentication_status'] = True
