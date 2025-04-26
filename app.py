@@ -100,8 +100,6 @@ if urllib.parse.unquote_plus(current_params.get("username", [None])[0] or "") !=
     current_params["username"] = [urllib.parse.quote_plus(st.session_state["user_name"])]
     st.query_params = current_params
 
-
-
 # Logout button
 if st.button("📱 Logout", type="secondary"):
     st.session_state['user_name'] = None
