@@ -96,9 +96,11 @@ st.success(f"👤 Logged in as: {st.session_state.user_name}")
 
 # Ensure ?username=... is in the URL if user is logged in
 current_params = st.query_params
-if current_params.get("username", [None])[0] != st.session_state["user_name"]:
-    current_params["username"] = [st.session_state["user_name"]]
+if urllib.parse.unquote_plus(current_params.get("username", [None])[0] or "") != st.session_state["user_name"]:
+    current_params["username"] = [urllib.parse.quote_plus(st.session_state["user_name"])]
     st.query_params = current_params
+
+
 
 # Logout button
 if st.button("📱 Logout", type="secondary"):
