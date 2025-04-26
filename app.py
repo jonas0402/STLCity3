@@ -740,10 +740,10 @@ def display_week_calendar(start_date, events):
                     field, address = clean_location(event.location)
 
                     if field:
-                        st.write(f"🏟️ Field: {field}")
+                        st.write(f"🏟️ **Field**: {field}")
 
                     if address:
-                        st.write(f"📍Address: {address}")
+                        st.write(f"📍**Address**: {address}")
                         maps_query = address.replace(' ', '+')
                         google_maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                         apple_maps_url = f"https://maps.apple.com/?q={maps_query}"
