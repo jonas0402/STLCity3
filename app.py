@@ -743,12 +743,13 @@ def display_week_calendar(start_date, events):
                         st.write(f"🏟️ Field: {field}")
 
                     if address:
+                        st.write(f"📍Address: {address}")
                         maps_query = address.replace(' ', '+')
                         google_maps_url = f"https://www.google.com/maps/search/?api=1&query={maps_query}"
                         apple_maps_url = f"https://maps.apple.com/?q={maps_query}"
 
                         st.markdown(f"""
-                            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                            <div style="display: flex; gap: 10px; margin-top: 20px;">
                                 <a href="{google_maps_url}" target="_blank">
                                     <button style="background-color: #4285F4; color: white; padding: 6px 12px; border: none; border-radius: 5px;">
                                         Google Maps
