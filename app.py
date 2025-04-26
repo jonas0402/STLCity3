@@ -903,7 +903,7 @@ with tab3:
     if past_events:
         st.info(f"Showing all {len(past_events)} past games")
         for event in past_events:  # Show all past games
-            with st.expander(f"{event.begin.date()} {event.begin.format('HH:mm')} - {event.name}"):
+            with st.expander(f"{event.begin.date()} {event.begin.format('h:mm A')} - {event.name}"):
 
                 # Parse and display game result if available
                 result = parse_game_result(event.name)
@@ -953,7 +953,7 @@ with tab3:
                 
                 with game_details[1]:
                     if event.location:
-                        st.write(f"📍 **Location**: {event.location}")
+                        st.write(f"📍 **Location**: {clean_game_name(event.location)}")
     else:
         st.warning("No past games found")
 
@@ -977,7 +977,7 @@ with tab4:
         if upcoming_rsvps:
             st.subheader("Upcoming Games")
             for event, rsvp in sorted(upcoming_rsvps, key=lambda x: x[0].begin.datetime):
-                with st.expander(f"{event.begin.date()} {event.begin.format('HH:mm')} - {event.name}"):
+                with st.expander(f"{event.begin.date()} {event.begin.format('h:mm A')} - {event.name}"):
 
                     st.write(f"RSVP'd on: {rsvp['timestamp']}")
                     handle_rsvp_buttons(event.uid, st.session_state.user_name, "my_")
