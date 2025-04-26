@@ -12,6 +12,8 @@ from pathlib import Path
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
+import urllib.parse
+
 
 # --- ANNOUNCEMENTS ---
 def show_temporary_announcement():
@@ -51,14 +53,16 @@ with col2:
 def get_cookie(key):
     """Get cookie value"""
     try:
-        return st.query_params[key][0]  # ✅ updated from experimental
-    except:
+        value = st.query_params[key][0]
+        return urllib.parse.unquote_plus(value)  # ✅ decode it back
+    except (KeyError, IndexError):
         return None
 
 def set_cookie(key, value):
     """Set cookie value"""
     current_params = st.query_params
-    current_params[key] = [value]  # ✅ Wrap in list
+    encoded_value = urllib.parse.quote_plus(value)  # ✅ encode spaces and full names
+    current_params[key] = [encoded_value]
     st.query_params = current_params
 
 # Initialize authentication
