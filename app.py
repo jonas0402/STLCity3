@@ -53,7 +53,7 @@ with col2:
 def get_cookie(key):
     """Get cookie value"""
     try:
-        value = st.query_params[key][0]
+        value = st.query_params[key]
         return urllib.parse.unquote_plus(value)  # ✅ decode it back
     except (KeyError, IndexError):
         return None
