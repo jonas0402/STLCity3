@@ -201,6 +201,13 @@ def clean_game_name(name):
         return name[len(prefix):]  # Cut the prefix
     return name
 
+def clean_location(location):
+    """Remove 'Soccerdome (Webster Groves) on ' from location."""
+    prefix = "Soccerdome (Webster Groves) on "
+    if location and location.startswith(prefix):
+        return location[len(prefix):]
+    return location
+
 # Define parse_game_result locally to avoid import issues
 def parse_game_result(event_name):
     """Parse the game result from the event name if available"""
@@ -718,8 +725,9 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
                 if event.location:
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={event.location.replace(' ', '+')}"
-                    st.write(f"[📍 {event.location}]({maps_url})")
+                    cleaned_location = clean_location(event.location)
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={cleaned_location.replace(' ', '+')}"
+                    st.markdown(f"[📍 {cleaned_location}]({maps_url})")
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
