@@ -737,10 +737,10 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
                 if event.location:
-                    cleaned_location = clean_location(event.location)
+                    clean_location = clean_location(event.location)
                     
                     # Encode location for URLs
-                    encoded_location = cleaned_location.replace(' ', '+')
+                    encoded_location = clean_location.replace(' ', '+')
                     
                     # Build links
                     google_maps_url = f"https://www.google.com/maps/search/?api=1&query={encoded_location}"
