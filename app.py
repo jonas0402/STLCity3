@@ -345,7 +345,7 @@ if not verify_database_setup():
 
 # Now fetch calendar events after database is ready
 ical_url = "https://sportsix.sports-it.com/ical/?cid=vetta&id=530739&k=eb6b76bb92bc6e66bdb4cac8357cc495"
-events = get_calendar_events_no_cache(ical_url)  # Use non-cached version on first load
+events = get_calendar_events(ical_url)  # ✅ Cached version!
 
 # --- HELPER FUNCTIONS ---
 
