@@ -737,12 +737,23 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
                 if event.location:
-                    field, address = clean_location(event.location)
-                    if field:
-                        st.write(f"🏟️ Field: {field}")
-                    if address:
-                        maps_url = f"https://www.google.com/maps/search/?api=1&query={address.replace(' ', '+')}"
-                        st.write(f"[📍 {address}]({maps_url})", unsafe_allow_html=True)
+                    cleaned_location = clean_location(event.location)
+                    
+                    # Encode location for URLs
+                    encoded_location = cleaned_location.replace(' ', '+')
+                    
+                    # Build links
+                    google_maps_url = f"https://www.google.com/maps/search/?api=1&query={encoded_location}"
+                    apple_maps_url = f"https://maps.apple.com/?q={encoded_location}"
+                    
+                    # Show options
+                    st.markdown(
+                        f"""
+                        **📍 Location:**  
+                        [🗺️ Open in Google Maps]({google_maps_url}) | [🍎 Open in Apple Maps]({apple_maps_url})
+                        """,
+                        unsafe_allow_html=True
+                    )
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
