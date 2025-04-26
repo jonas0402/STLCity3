@@ -194,6 +194,13 @@ http.mount("http://", adapter)
 # Disable insecure request warnings
 urllib3.disable_warnings()
 
+def clean_game_name(name):
+    """Remove 'Soccerdome (Webster Groves) on ' and return cleaned name."""
+    prefix = "Soccerdome (Webster Groves) on "
+    if name.startswith(prefix):
+        return name[len(prefix):]  # Cut the prefix
+    return name
+
 # Define parse_game_result locally to avoid import issues
 def parse_game_result(event_name):
     """Parse the game result from the event name if available"""
@@ -707,8 +714,8 @@ def display_week_calendar(start_date, events):
         with day_cols[idx]:
             day_events = [e for e in events if e.begin.date() == dt]
             for event in day_events:
-                event_time = event.begin.format("HH:mm")
-                st.write(f"**{event.name}**")
+                event_time = event.begin.format("h:mm A")
+                st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
                 
                 # Get attendance counts
