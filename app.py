@@ -21,6 +21,41 @@ WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
 STL_LAT = 38.6270
 STL_LON = -90.1994
 
+def get_weather_for_time(game_time):
+    """Get weather forecast for a specific game time."""
+    if not WEATHER_API_KEY:
+        return None
+        
+    try:
+        # Convert game time to unix timestamp
+        timestamp = int(game_time.timestamp())
+        
+        # Make API request
+        params = {
+            'lat': STL_LAT,
+            'lon': STL_LON,
+            'appid': WEATHER_API_KEY,
+            'units': 'imperial'  # For Fahrenheit
+        }
+        
+        response = requests.get(WEATHER_BASE_URL, params=params)
+        response.raise_for_status()
+        
+        weather_data = response.json()
+        
+        # Find the closest forecast time
+        forecasts = weather_data['list']
+        closest_forecast = min(forecasts, 
+                             key=lambda x: abs(x['dt'] - timestamp))
+        
+        return {
+            'temp': round(closest_forecast['main']['temp']),
+            'description': closest_forecast['weather'][0]['description'],
+            'icon': closest_forecast['weather'][0]['icon']
+        }
+    except Exception as e:
+        st.warning(f"Could not fetch weather data: {str(e)}")
+        return None
 
 # --- ANNOUNCEMENTS ---
 def show_temporary_announcement():
@@ -1041,42 +1076,3 @@ with tab4:
 with tab5:
     st.header("Team Statistics")
     display_season_stats()
-
-# Weather integration
-def get_weather_for_time(game_time):
-    """Get weather forecast for a specific game time."""
-    if not WEATHER_API_KEY:
-        return None
-        
-    try:
-        # Convert game time to unix timestamp
-        timestamp = int(game_time.timestamp())
-        
-        # Make API request
-        params = {
-            'lat': STL_LAT,
-            'lon': STL_LON,
-            'appid': WEATHER_API_KEY,
-            'units': 'imperial'  # For Fahrenheit
-        }
-        
-        response = requests.get(WEATHER_BASE_URL, params=params)
-        response.raise_for_status()
-        
-        weather_data = response.json()
-        
-        # Find the closest forecast time
-        forecasts = weather_data['list']
-        closest_forecast = min(forecasts, 
-                             key=lambda x: abs(x['dt'] - timestamp))
-        
-        return {
-            'temp': round(closest_forecast['main']['temp']),
-            'description': closest_forecast['weather'][0]['description'],
-            'icon': closest_forecast['weather'][0]['icon']
-        }
-    except Exception as e:
-        st.warning(f"Could not fetch weather data: {str(e)}")
-        return None
-
-# Example usage in the calendar display
