@@ -617,144 +617,217 @@ def get_rsvp_list(event_uid):
         return []
 
 # --- STATISTICS FUNCTIONS ---
+def determine_seasons(games):
+    """Group games into seasons based on gaps in play.
+    A new season starts when there's a gap of 14 or more days between games."""
+    if not games:
+        return []
+    
+    # Sort games by start time
+    sorted_games = sorted(games, key=lambda g: g['start_time'])
+    
+    seasons = []
+    current_season = [sorted_games[0]]
+    
+    for i in range(1, len(sorted_games)):
+        current_game = sorted_games[i]
+        last_game = sorted_games[i-1]
+        
+        # Convert ISO strings to datetime objects
+        current_date = datetime.fromisoformat(current_game['start_time'])
+        last_date = datetime.fromisoformat(last_game['start_time'])
+        
+        # Calculate days between games
+        gap = (current_date - last_date).days
+        
+        if gap >= 14:  # If gap is 2 weeks or more, start new season
+            seasons.append(current_season)
+            current_season = [current_game]
+        else:
+            current_season.append(current_game)
+    
+    # Add the last season
+    if current_season:
+        seasons.append(current_season)
+    
+    return seasons
+
 def get_season_stats():
     """Get overall season statistics"""
     try:
         # Get all games with results
-        response = supabase.table("games").select("*").not_.is_("result", "null").order("start_time").execute()
-        games = response.data
+        response = supabase.table("games").select("*").order("start_time").execute()
+        all_games = response.data
         
-        if not games:
+        if not all_games:
             return None
             
-        total_games = len(games)
-        wins = len([g for g in games if g['result'] == 'W'])
-        losses = len([g for g in games if g['result'] == 'L'])
+        # Split games into seasons
+        seasons = determine_seasons(all_games)
         
-        # Calculate win percentage
-        win_pct = (wins / total_games) * 100 if total_games > 0 else 0
+        season_stats = []
+        for season_number, season_games in enumerate(seasons, 1):
+            games_with_results = [g for g in season_games if g['result']]
+            
+            if not games_with_results:
+                continue
+                
+            total_games = len(games_with_results)
+            wins = len([g for g in games_with_results if g['result'] == 'W'])
+            losses = len([g for g in games_with_results if g['result'] == 'L'])
+            
+            # Calculate win percentage
+            win_pct = (wins / total_games) * 100 if total_games > 0 else 0
+            
+            # Parse scores to get goals for/against
+            goals_for = 0
+            goals_against = 0
+            for game in games_with_results:
+                if game['score']:
+                    try:
+                        our_score, their_score = map(int, game['score'].split('-'))
+                        goals_for += our_score
+                        goals_against += their_score
+                    except:
+                        continue
+            
+            # Get season date range
+            season_start = datetime.fromisoformat(season_games[0]['start_time']).strftime('%Y-%m-%d')
+            season_end = datetime.fromisoformat(season_games[-1]['start_time']).strftime('%Y-%m-%d')
+            
+            season_stats.append({
+                'season_number': season_number,
+                'date_range': f"{season_start} to {season_end}",
+                'total_games': total_games,
+                'wins': wins,
+                'losses': losses,
+                'win_pct': win_pct,
+                'goals_for': goals_for,
+                'goals_against': goals_against,
+                'goal_diff': goals_for - goals_against,
+                'games': games_with_results
+            })
         
-        # Parse scores to get goals for/against
-        goals_for = 0
-        goals_against = 0
-        for game in games:
-            if game['score']:
-                try:
-                    our_score, their_score = map(int, game['score'].split('-'))
-                    goals_for += our_score
-                    goals_against += their_score
-                except:
-                    continue
-        
-        return {
-            'total_games': total_games,
-            'wins': wins,
-            'losses': losses,
-            'win_pct': win_pct,
-            'goals_for': goals_for,
-            'goals_against': goals_against,
-            'goal_diff': goals_for - goals_against,
-            'games': games
-        }
+        return season_stats
     except Exception as e:
         st.error(f"Error getting season stats: {str(e)}")
         return None
 
-def get_opponent_stats():
-    """Get statistics broken down by opponent"""
-    try:
-        # Get all games with results
-        response = supabase.table("games").select("*").execute()
-        games = [g for g in response.data if g['result'] and g['opponent']]
-        
-        opponent_stats = {}
-        for game in games:
-            opponent = game['opponent']
-            if opponent not in opponent_stats:
-                opponent_stats = {'games': 0, 'wins': 0, 'losses': 0, 'goals_for': 0, 'goals_against': 0}
-            
-            stats = opponent_stats
-            stats['games'] += 1
-            
-            if game['result'] == 'W':
-                stats['wins'] += 1
-            elif game['result'] == 'L':
-                stats['losses'] += 1
-                
-            if game['score']:
-                try:
-                    our_score, their_score = map(int, game['score'].split('-'))
-                    stats['goals_for'] += our_score
-                    stats['goals_against'] += their_score
-                except:
-                    continue
-        
-        return opponent_stats
-    except Exception as e:
-        st.error(f"Error getting opponent stats: {str(e)}")
-        return None
-
 def display_season_stats():
     """Display season statistics in a visually appealing way"""
-    stats = get_season_stats()
-    if not stats:
+    season_stats = get_season_stats()
+    if not season_stats:
         st.warning("No game results available yet")
         return
+    
+    # Create tabs for each season plus an "All Seasons" summary
+    season_tabs = ["All Seasons"] + [f"Season {s['season_number']}" for s in season_stats]
+    tabs = st.tabs(season_tabs)
+    
+    # Calculate all-seasons totals for the first tab
+    total_games = sum(s['total_games'] for s in season_stats)
+    total_wins = sum(s['wins'] for s in season_stats)
+    total_losses = sum(s['losses'] for s in season_stats)
+    total_win_pct = (total_wins / total_games * 100) if total_games > 0 else 0
+    total_goals_for = sum(s['goals_for'] for s in season_stats)
+    total_goals_against = sum(s['goals_against'] for s in season_stats)
+    total_goal_diff = total_goals_for - total_goals_against
+    
+    # Display All Seasons summary
+    with tabs[0]:
+        st.subheader("Overall Record (All Seasons)")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("Games Played", total_games)
+        with col2:
+            st.metric("Wins", total_wins)
+        with col3:
+            st.metric("Losses", total_losses)
+        with col4:
+            st.metric("Win %", f"{total_win_pct:.1f}%")
         
-    # Overall Record
-    st.subheader("Season Record")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Games Played", stats['total_games'])
-    with col2:
-        st.metric("Wins", stats['wins'])
-    with col3:
-        st.metric("Losses", stats['losses'])
-    with col4:
-        st.metric("Win %", f"{stats['win_pct']:.1f}%")
-    
-    # Goals
-    st.subheader("Scoring")
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Goals For", stats['goals_for'])
-    with col2:
-        st.metric("Goals Against", stats['goals_against'])
-    with col3:
-        st.metric("Goal Difference", stats['goal_diff'], 
-                 delta_color="normal" if stats['goal_diff'] >= 0 else "inverse")
-    
-    # Recent Form
-    st.subheader("Recent Form")
-    recent_games = stats['games'][-5:]  # Last 5 games
-    if recent_games:
-        form_cols = st.columns(min(5, len(recent_games)))
-        for i, game in enumerate(recent_games):
-            with form_cols[i]:
-                if game['result'] == 'W':
-                    st.success("W")
-                else:
-                    st.error("L")
-                if game['score']:
-                    st.caption(f"{game['score']}")
-                if game['opponent']:
-                    st.caption(f"vs {game['opponent']}")
-
-    # Game History
-    if stats['games']:
-        st.subheader("Game History")
-        game_records = []
-        for game in stats['games']:
-            game_records.append({
-                'Date': game['start_time'].split('T')[0],
-                'Opponent': game['opponent'],
-                'Result': game['result'],
-                'Score': game['score'] if game['score'] else '-'
+        st.subheader("Overall Scoring")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Goals For", total_goals_for)
+        with col2:
+            st.metric("Goals Against", total_goals_against)
+        with col3:
+            st.metric("Goal Difference", total_goal_diff,
+                     delta_color="normal" if total_goal_diff >= 0 else "inverse")
+        
+        # Season Overview Table
+        st.subheader("Season-by-Season Overview")
+        season_records = []
+        for stats in season_stats:
+            season_records.append({
+                'Season': f"Season {stats['season_number']}",
+                'Dates': stats['date_range'],
+                'Games': stats['total_games'],
+                'Record': f"{stats['wins']}-{stats['losses']}",
+                'Win %': f"{stats['win_pct']:.1f}",
+                'GF-GA': f"{stats['goals_for']}-{stats['goals_against']}"
             })
-        
-        if game_records:
-            df = pd.DataFrame(game_records)
-            st.dataframe(df.set_index('Date'), use_container_width=True)
+        if season_records:
+            df = pd.DataFrame(season_records)
+            st.dataframe(df.set_index('Season'), use_container_width=True)
+    
+    # Display individual season stats in their respective tabs
+    for i, stats in enumerate(season_stats, 1):
+        with tabs[i]:
+            st.subheader(f"Season {stats['season_number']} ({stats['date_range']})")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Games Played", stats['total_games'])
+            with col2:
+                st.metric("Wins", stats['wins'])
+            with col3:
+                st.metric("Losses", stats['losses'])
+            with col4:
+                st.metric("Win %", f"{stats['win_pct']:.1f}%")
+            
+            st.subheader("Scoring")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Goals For", stats['goals_for'])
+            with col2:
+                st.metric("Goals Against", stats['goals_against'])
+            with col3:
+                st.metric("Goal Difference", stats['goal_diff'],
+                         delta_color="normal" if stats['goal_diff'] >= 0 else "inverse")
+            
+            # Recent Form
+            st.subheader("Recent Form")
+            recent_games = stats['games'][-5:]  # Last 5 games of the season
+            if recent_games:
+                form_cols = st.columns(min(5, len(recent_games)))
+                for i, game in enumerate(recent_games):
+                    with form_cols[i]:
+                        if game['result'] == 'W':
+                            st.success("W")
+                        else:
+                            st.error("L")
+                        if game['score']:
+                            st.caption(f"{game['score']}")
+                        if game['opponent']:
+                            st.caption(f"vs {game['opponent']}")
+
+            # Game History
+            if stats['games']:
+                st.subheader("Game History")
+                game_records = []
+                for game in stats['games']:
+                    game_records.append({
+                        'Date': game['start_time'].split('T')[0],
+                        'Opponent': game['opponent'],
+                        'Result': game['result'],
+                        'Score': game['score'] if game['score'] else '-'
+                    })
+                
+                if game_records:
+                    df = pd.DataFrame(game_records)
+                    st.dataframe(df.set_index('Date'), use_container_width=True)
 
 # --- DISPLAY FUNCTIONS ---
 def display_attendance_status(in_count):
@@ -866,7 +939,7 @@ def display_week_calendar(start_date, events):
                     weather = get_weather_for_time(event.begin.datetime, address)
                     if weather:
                         st.markdown(f"""
-##### 🌡️ Forecast for game time ({event_time}):
+##### 🌡️ Forecast for Game Time ({event_time}):
 
 **Temperature:**  {weather['temp']}°F _(Feels like {weather['feels_like']}°F)_  
 **Conditions:**   {weather['description']}  
@@ -1000,6 +1073,101 @@ def display_future_events(events):
             else:
                 st.write("No RSVPs yet")
 
+def display_past_games(past_events):
+    """Display past games grouped by season"""
+    if not past_events:
+        st.warning("No past games found")
+        return
+
+    # Convert events to game records and get seasons
+    games = []
+    for event in past_events:
+        game_data = {
+            "event_uid": event.uid,
+            "name": event.name,
+            "start_time": event.begin.datetime.isoformat(),
+            "location": event.location if event.location else "",
+            "result": None,
+            "score": None
+        }
+        
+        # Parse result if available
+        result = parse_game_result(event.name)
+        if result:
+            game_data["result"] = "W" if "Win" in result else "L"
+            game_data["score"] = result.split(" ")[1] if len(result.split(" ")) > 1 else None
+            
+        games.append(game_data)
+    
+    # Group games into seasons
+    seasons = determine_seasons(games)
+    
+    if not seasons:
+        st.warning("No past games found")
+        return
+        
+    st.info(f"Showing all {len(past_events)} past games across {len(seasons)} seasons")
+    
+    # Create expandable section for each season
+    for season_number, season_games in enumerate(seasons, 1):
+        season_start = datetime.fromisoformat(season_games[0]['start_time']).strftime('%Y-%m-%d')
+        season_end = datetime.fromisoformat(season_games[-1]['start_time']).strftime('%Y-%m-%d')
+        
+        with st.expander(f"Season {season_number} ({season_start} to {season_end})", expanded=True):
+            for game in season_games:
+                game_date = datetime.fromisoformat(game['start_time'])
+                game_time = game_date.strftime('%I:%M %p')
+                
+                with st.expander(f"{game_date.date()} {game_time} - {clean_game_name(game['name'])}"):
+                    # Display game result if available
+                    if game['result']:
+                        if game['result'] == 'L':
+                            st.error(f"📊 Result: Loss {game['score']}")
+                        else:
+                            st.success(f"📊 Result: Win {game['score']}")
+                    
+                    # Get attendance counts
+                    in_count, out_count = get_rsvp_counts(game['event_uid'])
+                    
+                    # Show attendance summary
+                    cols = st.columns(2)
+                    with cols[0]:
+                        st.write("👥 **Final Attendance**:", in_count)
+                    with cols[1]:
+                        if out_count > 0:
+                            st.write("🚫 **Declined**:", out_count)
+                    
+                    # Show who played
+                    rsvps = get_rsvp_list(game['event_uid'])
+                    if rsvps:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("✅ **Played:**")
+                            in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
+                            if in_players:
+                                st.write(", ".join(sorted(in_players)))
+                            else:
+                                st.write("No recorded attendance")
+                        
+                        with col2:
+                            st.write("❌ **Declined:**")
+                            out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
+                            if out_players:
+                                st.write(", ".join(sorted(out_players)))
+                            else:
+                                st.write("None")
+                    
+                    # Show the opponent and location
+                    game_details = st.columns(2)
+                    with game_details[0]:
+                        if "vs" in game['name']:
+                            opponent = game['name'].split("vs")[1].strip()
+                            st.write(f"🆚 **Opponent**: {opponent}")
+                    
+                    with game_details[1]:
+                        if game['location']:
+                            st.write(f"📍 **Location**: {clean_game_name(game['location'])}")
+
 # --- SETUP CALENDAR VIEW ---
 today = date.today()
 current_week_start = today - timedelta(days=today.weekday())  # Monday
@@ -1074,58 +1242,7 @@ with tab3:
     st.header("Past Games")
     if past_events:
         st.info(f"Showing all {len(past_events)} past games")
-        for event in past_events:  # Show all past games
-            with st.expander(f"{event.begin.date()} {event.begin.format('h:mm A')} - {event.name}"):
-
-                # Parse and display game result if available
-                result = parse_game_result(event.name)
-                if result:
-                    if "Loss" in result:
-                        st.error(f"📊 Result: {result}")
-                    else:
-                        st.success(f"📊 Result: {result}")
-                
-                # Get attendance counts
-                in_count, out_count = get_rsvp_counts(event.uid)
-                
-                # Show attendance summary
-                cols = st.columns(2)
-                with cols[0]:
-                    st.write("👥 **Final Attendance**:", in_count)
-                with cols[1]:
-                    if out_count > 0:
-                        st.write("🚫 **Declined**:", out_count)
-                
-                # Show who played
-                rsvps = get_rsvp_list(event.uid)
-                if rsvps:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write("✅ **Played:**")
-                        in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
-                        if in_players:
-                            st.write(", ".join(sorted(in_players)))
-                        else:
-                            st.write("No recorded attendance")
-                    
-                    with col2:
-                        st.write("❌ **Declined:**")
-                        out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
-                        if out_players:
-                            st.write(", ".join(sorted(out_players)))
-                        else:
-                            st.write("None")
-                
-                # Show the opponent and location
-                game_details = st.columns(2)
-                with game_details[0]:
-                    if "vs" in event.name:
-                        opponent = event.name.split("vs")[1].strip()
-                        st.write(f"🆚 **Opponent**: {opponent}")
-                
-                with game_details[1]:
-                    if event.location:
-                        st.write(f"📍 **Location**: {clean_game_name(event.location)}")
+        display_past_games(past_events)
     else:
         st.warning("No past games found")
 
