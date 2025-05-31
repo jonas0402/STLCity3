@@ -27,6 +27,13 @@ def get_weather_for_time(game_time):
         return None
         
     try:
+        # Only get weather for future games within 5 days (API limitation)
+        now = datetime.now(timezone.utc)
+        five_days_from_now = now + timedelta(days=5)
+        
+        if game_time < now or game_time > five_days_from_now:
+            return None
+            
         # Convert game time to unix timestamp
         timestamp = int(game_time.timestamp())
         
@@ -35,7 +42,8 @@ def get_weather_for_time(game_time):
             'lat': STL_LAT,
             'lon': STL_LON,
             'appid': WEATHER_API_KEY,
-            'units': 'imperial'  # For Fahrenheit
+            'units': 'imperial',  # For Fahrenheit
+            'cnt': 40  # Get maximum number of timesteps
         }
         
         response = requests.get(WEATHER_BASE_URL, params=params)
@@ -43,19 +51,29 @@ def get_weather_for_time(game_time):
         
         weather_data = response.json()
         
+        if 'list' not in weather_data:
+            return None
+            
         # Find the closest forecast time
         forecasts = weather_data['list']
         closest_forecast = min(forecasts, 
                              key=lambda x: abs(x['dt'] - timestamp))
         
+        # Only return weather if it's within 3 hours of game time
+        if abs(closest_forecast['dt'] - timestamp) > 10800:  # 3 hours in seconds
+            return None
+            
+        weather_description = closest_forecast['weather'][0]['description']
+        # Capitalize first letter of each word in description
+        weather_description = ' '.join(word.capitalize() for word in weather_description.split())
+        
         return {
             'temp': round(closest_forecast['main']['temp']),
-            'description': closest_forecast['weather'][0]['description'],
+            'description': weather_description,
             'icon': closest_forecast['weather'][0]['icon']
         }
     except Exception as e:
-        st.warning(f"Could not fetch weather data: {str(e)}")
-        return None
+        return None  # Silently fail for better user experience
 
 # --- ANNOUNCEMENTS ---
 def show_temporary_announcement():
