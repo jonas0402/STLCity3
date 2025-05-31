@@ -31,13 +31,20 @@ def get_coordinates_from_address(address):
             'User-Agent': 'STLCity3GameApp/1.0'
         }
         
+        st.write(f"Getting coordinates for address: {address}")
         response = requests.get(nominatim_url, headers=headers)
         response.raise_for_status()
         
         data = response.json()
         if data:
-            return float(data[0]['lat']), float(data[0]['lon'])
+            lat, lon = float(data[0]['lat']), float(data[0]['lon'])
+            st.write(f"Found coordinates: {lat}, {lon}")
+            return lat, lon
+        else:
+            st.write("No coordinates found for address")
+            return None, None
     except Exception as e:
+        st.write(f"Error getting coordinates: {str(e)}")
         return None, None
 
 def get_weather_for_time(game_time, address=None):
@@ -55,16 +62,24 @@ def get_weather_for_time(game_time, address=None):
             
         if game_time > five_days_from_now:
             return None
-            
-        # Get coordinates from address or use default Soccer Park coordinates
+
+        # Format address for geocoding
         if address:
-            lat, lon = get_coordinates_from_address(address)
-        else:
-            # Default to World Wide Technology Soccer Park coordinates
-            lat, lon = 38.5472, -90.4453
+            # Extract full address if location contains a field name
+            if " - " in address:
+                address = address.split(" - ")[1].strip()
             
-        if not lat or not lon:
-            # Fallback to default coordinates if geocoding fails
+            # Add city/state if not present
+            if "Fenton" not in address and "MO" not in address:
+                address += " Fenton, MO"
+                
+            # Get coordinates for the location
+            lat, lon = get_coordinates_from_address(address)
+            if not lat or not lon:
+                # Fallback to default coordinates if geocoding fails
+                lat, lon = 38.5472, -90.4453  # World Wide Technology Soccer Park
+        else:
+            # Default to Soccer Park coordinates
             lat, lon = 38.5472, -90.4453
             
         # Convert game time to unix timestamp
@@ -102,7 +117,8 @@ def get_weather_for_time(game_time, address=None):
         return {
             'temp': round(closest_forecast['main']['temp']),
             'description': weather_description,
-            'icon': closest_forecast['weather'][0]['icon']
+            'icon': closest_forecast['weather'][0]['icon'],
+            'location': address  # Add location for debugging
         }
         
     except Exception as e:
@@ -837,7 +853,7 @@ def display_week_calendar(start_date, events):
                     # Add weather information with more prominent display
                     weather = get_weather_for_time(event.begin.datetime, address)
                     if weather:
-                        st.info(f"🌡️ Weather: {weather['temp']}°F\n{weather['description']}")
+                        st.info(f"🌡️ Weather: {weather['temp']}°F\n{weather['description']}\nLocation: {weather['location']}")
 
                     if field:
                         st.write(f"🏟️ **Field**: {field}")
