@@ -1081,25 +1081,33 @@ def display_past_games(past_events):
         all_games = response.data
         
         if not all_games:
-            st.warning("No past games found")
+            st.warning("Database query returned no games at all")
             return
             
-        # Filter to only past games
-        today = date.today()
+        st.write(f"Debug: Found {len(all_games)} total games in database")
+        
+        # Filter to only past games, properly handling timezone-aware datetimes
+        today = datetime.now(timezone.utc)
         past_games = [
             game for game in all_games 
-            if datetime.fromisoformat(game['start_time']).date() < today
+            if datetime.fromisoformat(game['start_time']) < today
         ]
         
         if not past_games:
-            st.warning("No past games found")
+            st.warning(f"Found {len(all_games)} games but none are in the past relative to {today}")
+            # Debug: Show the most recent game date
+            if all_games:
+                most_recent = max(all_games, key=lambda g: g['start_time'])
+                st.write(f"Most recent game date: {most_recent['start_time']}")
             return
+        
+        st.write(f"Debug: Filtered to {len(past_games)} past games")
         
         # Group games into seasons (20-day gap between seasons)
         seasons = determine_seasons(past_games)
         
         if not seasons:
-            st.warning("No past games found")
+            st.warning("No seasons could be determined from past games")
             return
             
         st.info(f"Found {len(past_games)} past games across {len(seasons)} seasons")
