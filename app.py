@@ -1075,108 +1075,119 @@ def display_future_events(events):
 
 def display_past_games(past_events):
     """Display past games grouped by season"""
-    if not past_events:
-        st.warning("No past games found")
-        return
-
-    # Convert events to game records and get seasons
-    games = []
-    for event in past_events:
-        game_data = {
-            "event_uid": event.uid,
-            "name": event.name,
-            "start_time": event.begin.datetime.isoformat(),
-            "location": event.location if event.location else "",
-            "result": None,
-            "score": None
-        }
+    try:
+        # Get all games from database with results
+        response = supabase.table("games").select("*").order("start_time").execute()
+        all_games = response.data
         
-        # Parse result if available
-        result = parse_game_result(event.name)
-        if result:
-            game_data["result"] = "W" if "Win" in result else "L"
-            game_data["score"] = result.split(" ")[1] if len(result.split(" ")) > 1 else None
+        if not all_games:
+            st.warning("No past games found")
+            return
             
-        games.append(game_data)
-    
-    # Group games into seasons
-    seasons = determine_seasons(games)
-    
-    if not seasons:
-        st.warning("No past games found")
-        return
+        # Filter to only past games
+        today = date.today()
+        past_games = [
+            game for game in all_games 
+            if datetime.fromisoformat(game['start_time']).date() < today
+        ]
         
-    st.info(f"Showing all {len(past_events)} past games across {len(seasons)} seasons")
-    
-    # Create expandable section for each season
-    for season_number, season_games in enumerate(seasons, 1):
-        season_start = datetime.fromisoformat(season_games[0]['start_time']).strftime('%Y-%m-%d')
-        season_end = datetime.fromisoformat(season_games[-1]['start_time']).strftime('%Y-%m-%d')
+        if not past_games:
+            st.warning("No past games found")
+            return
         
-        with st.expander(f"Season {season_number} ({season_start} to {season_end})", expanded=True):
-            for game in season_games:
-                game_date = datetime.fromisoformat(game['start_time'])
-                game_time = game_date.strftime('%I:%M %p')
-                
-                with st.expander(f"{game_date.date()} {game_time} - {clean_game_name(game['name'])}"):
-                    # Display game result if available
-                    if game['result']:
-                        if game['result'] == 'L':
-                            st.error(f"📊 Result: Loss {game['score']}")
-                        else:
-                            st.success(f"📊 Result: Win {game['score']}")
+        # Group games into seasons (20-day gap between seasons)
+        seasons = determine_seasons(past_games)
+        
+        if not seasons:
+            st.warning("No past games found")
+            return
+            
+        st.info(f"Found {len(past_games)} past games across {len(seasons)} seasons")
+        
+        # Create expandable section for each season
+        for season_number, season_games in enumerate(seasons, 1):
+            season_start = datetime.fromisoformat(season_games[0]['start_time']).strftime('%Y-%m-%d')
+            season_end = datetime.fromisoformat(season_games[-1]['start_time']).strftime('%Y-%m-%d')
+            
+            with st.expander(f"Season {season_number} ({season_start} to {season_end})", expanded=True):
+                for game in season_games:
+                    game_date = datetime.fromisoformat(game['start_time'])
+                    game_time = game_date.strftime('%I:%M %p')
                     
-                    # Get attendance counts
-                    in_count, out_count = get_rsvp_counts(game['event_uid'])
-                    
-                    # Show attendance summary
-                    cols = st.columns(2)
-                    with cols[0]:
-                        st.write("👥 **Final Attendance**:", in_count)
-                    with cols[1]:
-                        if out_count > 0:
-                            st.write("🚫 **Declined**:", out_count)
-                    
-                    # Show who played
-                    rsvps = get_rsvp_list(game['event_uid'])
-                    if rsvps:
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            st.write("✅ **Played:**")
-                            in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
-                            if in_players:
-                                st.write(", ".join(sorted(in_players)))
+                    with st.expander(f"{game_date.date()} {game_time} - {clean_game_name(game['name'])}"):
+                        # Display game result if available
+                        if game.get('result'):
+                            if game['result'] == 'L':
+                                st.error(f"📊 Result: Loss {game['score']}")
                             else:
-                                st.write("No recorded attendance")
+                                st.success(f"📊 Result: Win {game['score']}")
                         
-                        with col2:
-                            st.write("❌ **Declined:**")
-                            out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
-                            if out_players:
-                                st.write(", ".join(sorted(out_players)))
-                            else:
-                                st.write("None")
-                    
-                    # Show the opponent and location
-                    game_details = st.columns(2)
-                    with game_details[0]:
-                        if "vs" in game['name']:
-                            opponent = game['name'].split("vs")[1].strip()
-                            st.write(f"🆚 **Opponent**: {opponent}")
-                    
-                    with game_details[1]:
-                        if game['location']:
-                            st.write(f"📍 **Location**: {clean_game_name(game['location'])}")
+                        # Get attendance counts
+                        in_count, out_count = get_rsvp_counts(game['event_uid'])
+                        
+                        # Show attendance summary
+                        cols = st.columns(2)
+                        with cols[0]:
+                            st.write("👥 **Final Attendance**:", in_count)
+                        with cols[1]:
+                            if out_count > 0:
+                                st.write("🚫 **Declined**:", out_count)
+                        
+                        # Show who played
+                        rsvps = get_rsvp_list(game['event_uid'])
+                        if rsvps:
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write("✅ **Played:**")
+                                in_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "In"]
+                                if in_players:
+                                    st.write(", ".join(sorted(in_players)))
+                                else:
+                                    st.write("No recorded attendance")
+                            
+                            with col2:
+                                st.write("❌ **Declined:**")
+                                out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
+                                if out_players:
+                                    st.write(", ".join(sorted(out_players)))
+                                else:
+                                    st.write("None")
+                        
+                        # Show the opponent and location
+                        game_details = st.columns(2)
+                        with game_details[0]:
+                            if game['opponent']:
+                                st.write(f"🆚 **Opponent**: {game['opponent']}")
+                        
+                        with game_details[1]:
+                            if game['location']:
+                                st.write(f"📍 **Location**: {clean_game_name(game['location'])}")
+                                
+                        st.markdown("---")
+    except Exception as e:
+        st.error(f"Error displaying past games: {str(e)}")
+        return
 
 # --- SETUP CALENDAR VIEW ---
-today = datetime.now().date()  # Get today's date for comparison
+today = date.today()  # Just get today's date
 current_week_start = today - timedelta(days=today.weekday())  # Monday
 current_week_end = current_week_start + timedelta(days=6)
 
-# Filter events into appropriate categories
-past_events = [e for e in events if e.begin.date() < today]
-current_week_events = [e for e in events if current_week_start <= e.begin.date() <= current_week_end]
-future_events = [e for e in events if e.begin.date() > current_week_end]
+# Filter events using pure date comparison
+past_events = []
+current_week_events = []
+future_events = []
+
+for event in events:
+    event_date = event.begin.date()  # Get just the date without time
+    
+    # Simple date comparison
+    if event_date < today:  # Past events
+        past_events.append(event)
+    elif current_week_start <= event_date <= current_week_end:  # Current week
+        current_week_events.append(event)
+    else:  # Future events
+        future_events.append(event)
 
 # Sort all event lists
 current_week_events.sort(key=lambda e: e.begin.datetime)
@@ -1232,7 +1243,7 @@ with tab1:
 with tab2:
     st.header("Future Games")
     if future_events:
-        st.info(f"Showing all {len(future_events)} upcoming games")
+        st.info(f"Showing all {future_events} upcoming games")
         display_future_events(future_events)
     else:
         st.warning("No future games scheduled yet")
