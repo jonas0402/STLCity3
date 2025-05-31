@@ -31,20 +31,14 @@ def get_coordinates_from_address(address):
             'User-Agent': 'STLCity3GameApp/1.0'
         }
         
-        st.write(f"Getting coordinates for address: {address}")
         response = requests.get(nominatim_url, headers=headers)
         response.raise_for_status()
         
         data = response.json()
         if data:
-            lat, lon = float(data[0]['lat']), float(data[0]['lon'])
-            st.write(f"Found coordinates: {lat}, {lon}")
-            return lat, lon
-        else:
-            st.write("No coordinates found for address")
-            return None, None
+            return float(data[0]['lat']), float(data[0]['lon'])
+        return None, None
     except Exception as e:
-        st.write(f"Error getting coordinates: {str(e)}")
         return None, None
 
 def get_weather_for_time(game_time, address=None):
@@ -871,12 +865,15 @@ def display_week_calendar(start_date, events):
                     # Add weather information with more prominent display
                     weather = get_weather_for_time(event.begin.datetime, address)
                     if weather:
-                        st.info(f"""🌡️ Forecast for game time ({event_time}):
-• Temperature: {weather['temp']}°F (Feels like {weather['feels_like']}°F)
-• Conditions: {weather['description']}
-• Wind: {weather['wind_speed']} mph
-• Humidity: {weather['humidity']}%
-• Rain chance: {weather['precipitation_chance']}%""")
+                        st.markdown(f"""
+##### 🌡️ Forecast for game time ({event_time}):
+
+**Temperature:**  {weather['temp']}°F _(Feels like {weather['feels_like']}°F)_  
+**Conditions:**   {weather['description']}  
+**Wind:**         {weather['wind_speed']} mph  
+**Humidity:**     {weather['humidity']}%  
+**Rain chance:**  {weather['precipitation_chance']}%
+                        """)
 
                     if field:
                         st.write(f"🏟️ **Field**: {field}")
