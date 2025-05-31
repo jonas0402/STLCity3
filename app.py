@@ -1,6 +1,5 @@
 import streamlit as st
 from supabase import create_client
-from dotenv import load_dotenv
 import os
 import requests
 from ics import Calendar
@@ -14,6 +13,13 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
 import urllib.parse
+import base64
+
+# Weather API configuration
+WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
+WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
+STL_LAT = 38.6270
+STL_LON = -90.1994
 
 
 # --- ANNOUNCEMENTS ---
@@ -214,6 +220,8 @@ def clean_location(location):
     
     if idx != -1:
         field = location[:idx].strip("- ").strip()
+        # Remove trailing "1" after field letter (e.g., "A 1" -> "A")
+        field = re.sub(r'([A-Z])\s*1$', r'\1', field)
         address = location[idx-2:].strip()  # take two characters before for "1 " in "1 Soccer Park Rd"
         return field, address
     else:
@@ -736,6 +744,12 @@ def display_week_calendar(start_date, events):
                 event_time = event.begin.format("h:mm A")
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
+
+                # Add weather information
+                weather = get_weather_for_time(event.begin.datetime)
+                if weather:
+                    st.write(f"🌡️ **Weather**: {weather['temp']}°F, {weather['description']}")
+
                 if event.location:
                     field, address = clean_location(event.location)
 
@@ -749,7 +763,7 @@ def display_week_calendar(start_date, events):
                         apple_maps_url = f"https://maps.apple.com/?q={maps_query}"
 
                         st.markdown(f"""
-                            <div style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 20px;">
+                            <div style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 10px;">
                                 <a href="{google_maps_url}" target="_blank">
                                     <button style="background-color: #4285F4; color: white; padding: 6px 12px; border: none; border-radius: 5px;">
                                         Google Maps
@@ -761,9 +775,14 @@ def display_week_calendar(start_date, events):
                                     </button>
                                 </a>
                             </div>
+                            <div style="margin-top: 10px; margin-bottom: 20px;">
+                                <a href="data:image/png;base64,{base64.b64encode(open('wwt_map.png', 'rb').read()).decode()}" target="_blank">
+                                    <button style="background-color: #2E7D32; color: white; padding: 6px 12px; border: none; border-radius: 5px; width: 100%;">
+                                        See Fields Map
+                                    </button>
+                                </a>
+                            </div>
                         """, unsafe_allow_html=True)
-
-
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
@@ -792,7 +811,7 @@ def display_week_calendar(start_date, events):
                             st.write(", ".join(sorted(in_players)))
                         else:
                             st.write("No one yet")
-                            
+                        
                         st.write("❌ Out:")
                         out_players = [rsvp['name'] for rsvp in rsvps if rsvp['participation'] == "Out"]
                         if out_players:
@@ -1022,3 +1041,42 @@ with tab4:
 with tab5:
     st.header("Team Statistics")
     display_season_stats()
+
+# Weather integration
+def get_weather_for_time(game_time):
+    """Get weather forecast for a specific game time."""
+    if not WEATHER_API_KEY:
+        return None
+        
+    try:
+        # Convert game time to unix timestamp
+        timestamp = int(game_time.timestamp())
+        
+        # Make API request
+        params = {
+            'lat': STL_LAT,
+            'lon': STL_LON,
+            'appid': WEATHER_API_KEY,
+            'units': 'imperial'  # For Fahrenheit
+        }
+        
+        response = requests.get(WEATHER_BASE_URL, params=params)
+        response.raise_for_status()
+        
+        weather_data = response.json()
+        
+        # Find the closest forecast time
+        forecasts = weather_data['list']
+        closest_forecast = min(forecasts, 
+                             key=lambda x: abs(x['dt'] - timestamp))
+        
+        return {
+            'temp': round(closest_forecast['main']['temp']),
+            'description': closest_forecast['weather'][0]['description'],
+            'icon': closest_forecast['weather'][0]['icon']
+        }
+    except Exception as e:
+        st.warning(f"Could not fetch weather data: {str(e)}")
+        return None
+
+# Example usage in the calendar display
