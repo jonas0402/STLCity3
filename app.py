@@ -1077,14 +1077,12 @@ def display_past_games(past_events):
     """Display past games grouped by season"""
     try:
         # Get all games from database with results
-        response = supabase.table("games").select("*").order("start_time").execute()
+        response = supabase.table("games").select("*").order("start_time", desc=True).execute()
         all_games = response.data
         
         if not all_games:
-            st.warning("Database query returned no games at all")
+            st.warning("No games found in database")
             return
-            
-        st.write(f"Debug: Found {len(all_games)} total games in database")
         
         # Filter to only past games, properly handling timezone-aware datetimes
         today = datetime.now(timezone.utc)
@@ -1094,20 +1092,16 @@ def display_past_games(past_events):
         ]
         
         if not past_games:
-            st.warning(f"Found {len(all_games)} games but none are in the past relative to {today}")
+            st.warning("No past games found")
             return
-        
-        st.write(f"Debug: Filtered to {len(past_games)} past games")
         
         # Group games into seasons (20-day gap between seasons)
         seasons = determine_seasons(past_games)
         
         if not seasons:
-            st.warning("No seasons could be determined from past games")
+            st.warning("No seasons could be determined")
             return
             
-        st.info(f"Found {len(past_games)} past games across {len(seasons)} seasons")
-        
         # Create tabs for each season
         season_tabs = st.tabs([f"Season {i+1}" for i in range(len(seasons))])
         
@@ -1120,11 +1114,12 @@ def display_past_games(past_events):
                 
                 # Create a container for the games
                 with st.container():
-                    for game in season_games:
+                    # Sort games in descending order (newest first)
+                    sorted_games = sorted(season_games, key=lambda x: x['start_time'], reverse=True)
+                    for game in sorted_games:
                         game_date = datetime.fromisoformat(game['start_time'])
                         game_time = game_date.strftime('%I:%M %p')
                         
-                        # Use columns instead of nested expanders
                         st.markdown(f"### {game_date.date()} {game_time} - {clean_game_name(game['name'])}")
                         
                         # Display game result if available
