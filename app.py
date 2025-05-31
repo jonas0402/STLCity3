@@ -812,9 +812,9 @@ def display_week_calendar(start_date, events):
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # Fields Map in an expander
-                        with st.expander("🗺️ See Fields Map", expanded=False):
-                            st.image("wwt_map.png", use_column_width=True)
+                        # Fields Map display
+                        if st.button("🗺️ See Fields Map", key=f"map_button_{event.uid}"):
+                            st.image("wwt_map.png", use_container_width=True)
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
