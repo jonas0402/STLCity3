@@ -812,24 +812,9 @@ def display_week_calendar(start_date, events):
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # Fields Map Button and popup implementation
-                        map_key = f"show_map_{event.uid}"
-                        if map_key not in st.session_state:
-                            st.session_state[map_key] = False
-                            
-                        if st.button("🗺️ See Fields Map", key=f"map_button_{event.uid}", type="secondary"):
-                            st.session_state[map_key] = True
-                            
-                        if st.session_state[map_key]:
-                            with st.container():
-                                col1, col2 = st.columns([0.9, 0.1])
-                                with col1:
-                                    st.subheader("Fields Map")
-                                with col2:
-                                    if st.button("❌", key=f"close_map_{event.uid}"):
-                                        st.session_state[map_key] = False
-                                        st.rerun()
-                                st.image("wwt_map.png", use_column_width=True)
+                        # Fields Map in an expander
+                        with st.expander("🗺️ See Fields Map", expanded=False):
+                            st.image("wwt_map.png", use_column_width=True)
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
