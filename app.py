@@ -619,7 +619,7 @@ def get_rsvp_list(event_uid):
 # --- STATISTICS FUNCTIONS ---
 def determine_seasons(games):
     """Group games into seasons based on gaps in play.
-    A new season starts when there's a gap of 14 or more days between games."""
+    A new season starts when there's a gap of 20 or more days between games."""
     if not games:
         return []
     
@@ -640,7 +640,7 @@ def determine_seasons(games):
         # Calculate days between games
         gap = (current_date - last_date).days
         
-        if gap >= 14:  # If gap is 2 weeks or more, start new season
+        if gap >= 20:  # If gap is 20 days or more, start new season
             seasons.append(current_season)
             current_season = [current_game]
         else:
@@ -1184,6 +1184,10 @@ current_week_events.sort(key=lambda e: e.begin.datetime)
 future_events.sort(key=lambda e: e.begin.datetime)
 past_events.sort(key=lambda e: e.begin.datetime, reverse=True)  # Most recent first
 
+# Make sure past events are only those that have already happened
+now = datetime.now(timezone.utc)
+past_events = [e for e in events if e.begin.datetime < now]
+
 # --- STREAMLIT APP LAYOUT ---
 
 # Main tabs for different views
@@ -1240,11 +1244,7 @@ with tab2:
 
 with tab3:
     st.header("Past Games")
-    if past_events:
-        st.info(f"Showing all {len(past_events)} past games")
-        display_past_games(past_events)
-    else:
-        st.warning("No past games found")
+    display_past_games(past_events)  # Remove the if condition to always call the function
 
 with tab4:
     st.header("My RSVPs")
