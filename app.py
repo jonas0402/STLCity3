@@ -916,7 +916,7 @@ def handle_rsvp_buttons(event_uid, user_name, btn_key_prefix=""):
 
 def display_week_calendar(start_date, events):
     """Display the current week as a grid calendar with interactive RSVPs."""
-    # Add custom CSS for weather forecast styling
+    # Add custom CSS for weather forecast and game title styling
     st.markdown("""
         <style>
         .weather-box {
@@ -925,6 +925,13 @@ def display_week_calendar(start_date, events):
             border-radius: 8px;
             margin: 10px 0;
             border: 1px solid rgba(255, 223, 0, 0.3);
+        }
+        .game-title-box {
+            background-color: rgba(65, 105, 225, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid rgba(65, 105, 225, 0.2);
         }
         </style>
     """, unsafe_allow_html=True)
@@ -942,8 +949,14 @@ def display_week_calendar(start_date, events):
             day_events = [e for e in events if e.begin.date() == dt]
             for event in day_events:
                 event_time = event.begin.format("h:mm A")
-                st.write(f"**{clean_game_name(event.name)}**")
-                st.write(f"*{event_time}*")
+                
+                # Display game title and time in styled box
+                st.markdown(f"""
+                    <div class="game-title-box">
+                        <strong>{clean_game_name(event.name)}</strong><br>
+                        <em>{event_time}</em>
+                    </div>
+                """, unsafe_allow_html=True)
 
                 if event.location:
                     field, address = clean_location(event.location)
