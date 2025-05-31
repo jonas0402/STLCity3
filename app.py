@@ -16,7 +16,7 @@ import urllib.parse
 import base64
 
 # Weather API configuration
-WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
+WEATHER_API_KEY = st.secrets["OPENWEATHER_API_KEY"]  # Remove the .get() and default value
 WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
 STL_LAT = 38.6270
 STL_LON = -90.1994
@@ -24,7 +24,6 @@ STL_LON = -90.1994
 def get_weather_for_time(game_time):
     """Get weather forecast for a specific game time."""
     if not WEATHER_API_KEY:
-        st.write("No API key found")
         return None
         
     try:
@@ -33,11 +32,9 @@ def get_weather_for_time(game_time):
         five_days_from_now = now + timedelta(days=5)
         
         if game_time < now:
-            st.write(f"Game time {game_time} is in the past")
             return None
             
         if game_time > five_days_from_now:
-            st.write(f"Game time {game_time} is more than 5 days away")
             return None
             
         # Convert game time to unix timestamp
@@ -51,17 +48,13 @@ def get_weather_for_time(game_time):
             'units': 'imperial'  # For Fahrenheit
         }
         
-        st.write("Fetching weather...")
         response = requests.get(WEATHER_BASE_URL, params=params)
         if not response.ok:
-            st.write(f"API Error: {response.status_code}")
             return None
             
         weather_data = response.json()
-        st.write("Got weather data")
         
         if 'list' not in weather_data:
-            st.write("No forecast list in response")
             return None
             
         # Find the closest forecast time
@@ -70,25 +63,19 @@ def get_weather_for_time(game_time):
                              key=lambda x: abs(x['dt'] - timestamp))
         
         time_diff = abs(closest_forecast['dt'] - timestamp)
-        st.write(f"Time difference from forecast: {time_diff/3600:.1f} hours")
-        
         if time_diff > 21600:  # 6 hours in seconds
-            st.write("Forecast too far from game time")
             return None
             
         weather_description = closest_forecast['weather'][0]['description']
         weather_description = ' '.join(word.capitalize() for word in weather_description.split())
         
-        result = {
+        return {
             'temp': round(closest_forecast['main']['temp']),
             'description': weather_description,
             'icon': closest_forecast['weather'][0]['icon']
         }
-        st.write(f"Weather found: {result}")
-        return result
         
     except Exception as e:
-        st.write(f"Error getting weather: {str(e)}")
         return None
 
 # --- ANNOUNCEMENTS ---
