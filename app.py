@@ -810,14 +810,14 @@ def display_week_calendar(start_date, events):
                                     </button>
                                 </a>
                             </div>
-                            <div style="margin-top: 10px; margin-bottom: 20px;">
-                                <a href="data:image/png;base64,{base64.b64encode(open('wwt_map.png', 'rb').read()).decode()}" target="_blank">
-                                    <button style="background-color: #2E7D32; color: white; padding: 6px 12px; border: none; border-radius: 5px; width: 100%;">
-                                        See Fields Map
-                                    </button>
-                                </a>
-                            </div>
                         """, unsafe_allow_html=True)
+
+                        # Fields Map Button that opens modal
+                        if st.button("🗺️ See Fields Map", key=f"map_button_{event.uid}", type="secondary"):
+                            map_modal = st.modal("Fields Map")
+                            with map_modal:
+                                st.image("wwt_map.png", use_column_width=True)
+                                st.caption("Click outside this window to close")
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
