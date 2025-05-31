@@ -83,14 +83,15 @@ def get_weather_for_time(game_time, address=None):
             lat, lon = 38.5472, -90.4453
             
         # Convert game time to unix timestamp
-        timestamp = int(game_time.timestamp())
+        game_timestamp = int(game_time.timestamp())
         
         # Make API request
         params = {
             'lat': lat,
             'lon': lon,
             'appid': WEATHER_API_KEY,
-            'units': 'imperial'  # For Fahrenheit
+            'units': 'imperial',  # For Fahrenheit
+            'cnt': 40  # Maximum number of timestamps
         }
         
         response = requests.get(WEATHER_BASE_URL, params=params)
@@ -102,23 +103,40 @@ def get_weather_for_time(game_time, address=None):
         if 'list' not in weather_data:
             return None
             
-        # Find the closest forecast time
+        # Find the forecast closest to game time
         forecasts = weather_data['list']
-        closest_forecast = min(forecasts, 
-                             key=lambda x: abs(x['dt'] - timestamp))
+        closest_forecast = None
+        smallest_time_diff = float('inf')
         
-        time_diff = abs(closest_forecast['dt'] - timestamp)
-        if time_diff > 21600:  # 6 hours in seconds
+        for forecast in forecasts:
+            time_diff = abs(forecast['dt'] - game_timestamp)
+            if time_diff < smallest_time_diff:
+                smallest_time_diff = time_diff
+                closest_forecast = forecast
+        
+        # Only use forecast if within 3 hours of game time
+        if smallest_time_diff > 10800:  # 3 hours in seconds
             return None
             
         weather_description = closest_forecast['weather'][0]['description']
         weather_description = ' '.join(word.capitalize() for word in weather_description.split())
         
+        # Extract additional weather details
+        temp = round(closest_forecast['main']['temp'])
+        feels_like = round(closest_forecast['main']['feels_like'])
+        humidity = closest_forecast['main']['humidity']
+        wind_speed = round(closest_forecast['wind']['speed'])
+        pop = closest_forecast.get('pop', 0) * 100  # Probability of precipitation as percentage
+        
         return {
-            'temp': round(closest_forecast['main']['temp']),
+            'temp': temp,
+            'feels_like': feels_like,
             'description': weather_description,
+            'humidity': humidity,
+            'wind_speed': wind_speed,
+            'precipitation_chance': round(pop),
             'icon': closest_forecast['weather'][0]['icon'],
-            'location': address  # Add location for debugging
+            'location': address
         }
         
     except Exception as e:
@@ -853,7 +871,12 @@ def display_week_calendar(start_date, events):
                     # Add weather information with more prominent display
                     weather = get_weather_for_time(event.begin.datetime, address)
                     if weather:
-                        st.info(f"🌡️ Weather: {weather['temp']}°F\n{weather['description']}\nLocation: {weather['location']}")
+                        st.info(f"""🌡️ Forecast for game time ({event_time}):
+• Temperature: {weather['temp']}°F (Feels like {weather['feels_like']}°F)
+• Conditions: {weather['description']}
+• Wind: {weather['wind_speed']} mph
+• Humidity: {weather['humidity']}%
+• Rain chance: {weather['precipitation_chance']}%""")
 
                     if field:
                         st.write(f"🏟️ **Field**: {field}")
