@@ -1169,28 +1169,14 @@ def display_past_games(past_events):
                             st.write(f"📍 **Location**: {clean_game_name(game['location'])}")
 
 # --- SETUP CALENDAR VIEW ---
-today = date.today()
+today = datetime.now().date()  # Get today's date for comparison
 current_week_start = today - timedelta(days=today.weekday())  # Monday
 current_week_end = current_week_start + timedelta(days=6)
 
-# Get current time in UTC for consistent comparison
-now = datetime.now(timezone.utc)
-
 # Filter events into appropriate categories
-past_events = []
-current_week_events = []
-future_events = []
-
-for e in events:
-    event_time = e.begin.datetime
-    event_date = event_time.date()
-    
-    if event_date < today:
-        past_events.append(e)
-    elif current_week_start <= event_date <= current_week_end:
-        current_week_events.append(e)
-    elif event_date > current_week_end:
-        future_events.append(e)
+past_events = [e for e in events if e.begin.date() < today]
+current_week_events = [e for e in events if current_week_start <= e.begin.date() <= current_week_end]
+future_events = [e for e in events if e.begin.date() > current_week_end]
 
 # Sort all event lists
 current_week_events.sort(key=lambda e: e.begin.datetime)
