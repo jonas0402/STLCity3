@@ -812,12 +812,12 @@ def display_week_calendar(start_date, events):
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # Fields Map Button that opens modal
+                        # Fields Map Button that opens dialog
                         if st.button("🗺️ See Fields Map", key=f"map_button_{event.uid}", type="secondary"):
-                            map_modal = st.modal("Fields Map")
-                            with map_modal:
+                            with st.dialog("Fields Map"):
                                 st.image("wwt_map.png", use_column_width=True)
                                 st.caption("Click outside this window to close")
+                                st.button("Close", key=f"close_map_{event.uid}")
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
