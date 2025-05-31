@@ -31,7 +31,9 @@ def get_weather_for_time(game_time):
         now = datetime.now(timezone.utc)
         five_days_from_now = now + timedelta(days=5)
         
-        if game_time < now or game_time > five_days_from_now:
+        if game_time < now:
+            return None
+        if game_time > five_days_from_now:
             return None
             
         # Convert game time to unix timestamp
@@ -59,8 +61,9 @@ def get_weather_for_time(game_time):
         closest_forecast = min(forecasts, 
                              key=lambda x: abs(x['dt'] - timestamp))
         
-        # Only return weather if it's within 3 hours of game time
-        if abs(closest_forecast['dt'] - timestamp) > 10800:  # 3 hours in seconds
+        # Only return weather if it's within 6 hours of game time (increased from 3)
+        time_diff = abs(closest_forecast['dt'] - timestamp)
+        if time_diff > 21600:  # 6 hours in seconds
             return None
             
         weather_description = closest_forecast['weather'][0]['description']
@@ -73,7 +76,7 @@ def get_weather_for_time(game_time):
             'icon': closest_forecast['weather'][0]['icon']
         }
     except Exception as e:
-        return None  # Silently fail for better user experience
+        return None
 
 # --- ANNOUNCEMENTS ---
 def show_temporary_announcement():
