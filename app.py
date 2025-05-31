@@ -18,10 +18,29 @@ import base64
 # Weather API configuration
 WEATHER_API_KEY = st.secrets["openweather"]["api_key"]
 WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
-STL_LAT = 38.6270
-STL_LON = -90.1994
 
-def get_weather_for_time(game_time):
+def get_coordinates_from_address(address):
+    """Get latitude and longitude from an address using OpenStreetMap Nominatim API"""
+    try:
+        # Format address for URL
+        formatted_address = urllib.parse.quote(address)
+        nominatim_url = f"https://nominatim.openstreetmap.org/search?q={formatted_address}&format=json"
+        
+        # Add User-Agent header to comply with Nominatim usage policy
+        headers = {
+            'User-Agent': 'STLCity3GameApp/1.0'
+        }
+        
+        response = requests.get(nominatim_url, headers=headers)
+        response.raise_for_status()
+        
+        data = response.json()
+        if data:
+            return float(data[0]['lat']), float(data[0]['lon'])
+    except Exception as e:
+        return None, None
+
+def get_weather_for_time(game_time, address=None):
     """Get weather forecast for a specific game time."""
     if not WEATHER_API_KEY:
         return None
@@ -37,13 +56,24 @@ def get_weather_for_time(game_time):
         if game_time > five_days_from_now:
             return None
             
+        # Get coordinates from address or use default Soccer Park coordinates
+        if address:
+            lat, lon = get_coordinates_from_address(address)
+        else:
+            # Default to World Wide Technology Soccer Park coordinates
+            lat, lon = 38.5472, -90.4453
+            
+        if not lat or not lon:
+            # Fallback to default coordinates if geocoding fails
+            lat, lon = 38.5472, -90.4453
+            
         # Convert game time to unix timestamp
         timestamp = int(game_time.timestamp())
         
         # Make API request
         params = {
-            'lat': STL_LAT,
-            'lon': STL_LON,
+            'lat': lat,
+            'lon': lon,
             'appid': WEATHER_API_KEY,
             'units': 'imperial'  # For Fahrenheit
         }
@@ -801,13 +831,13 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
 
-                # Add weather information with more prominent display
-                weather = get_weather_for_time(event.begin.datetime)
-                if weather:
-                    st.info(f"🌡️ Weather: {weather['temp']}°F\n{weather['description']}")
-
                 if event.location:
                     field, address = clean_location(event.location)
+
+                    # Add weather information with more prominent display
+                    weather = get_weather_for_time(event.begin.datetime, address)
+                    if weather:
+                        st.info(f"🌡️ Weather: {weather['temp']}°F\n{weather['description']}")
 
                     if field:
                         st.write(f"🏟️ **Field**: {field}")
