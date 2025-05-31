@@ -24,6 +24,7 @@ STL_LON = -90.1994
 def get_weather_for_time(game_time):
     """Get weather forecast for a specific game time."""
     if not WEATHER_API_KEY:
+        st.write("No API key found")
         return None
         
     try:
@@ -32,8 +33,11 @@ def get_weather_for_time(game_time):
         five_days_from_now = now + timedelta(days=5)
         
         if game_time < now:
+            st.write(f"Game time {game_time} is in the past")
             return None
+            
         if game_time > five_days_from_now:
+            st.write(f"Game time {game_time} is more than 5 days away")
             return None
             
         # Convert game time to unix timestamp
@@ -44,16 +48,20 @@ def get_weather_for_time(game_time):
             'lat': STL_LAT,
             'lon': STL_LON,
             'appid': WEATHER_API_KEY,
-            'units': 'imperial',  # For Fahrenheit
-            'cnt': 40  # Get maximum number of timesteps
+            'units': 'imperial'  # For Fahrenheit
         }
         
+        st.write("Fetching weather...")
         response = requests.get(WEATHER_BASE_URL, params=params)
-        response.raise_for_status()
-        
+        if not response.ok:
+            st.write(f"API Error: {response.status_code}")
+            return None
+            
         weather_data = response.json()
+        st.write("Got weather data")
         
         if 'list' not in weather_data:
+            st.write("No forecast list in response")
             return None
             
         # Find the closest forecast time
@@ -61,21 +69,26 @@ def get_weather_for_time(game_time):
         closest_forecast = min(forecasts, 
                              key=lambda x: abs(x['dt'] - timestamp))
         
-        # Only return weather if it's within 6 hours of game time (increased from 3)
         time_diff = abs(closest_forecast['dt'] - timestamp)
+        st.write(f"Time difference from forecast: {time_diff/3600:.1f} hours")
+        
         if time_diff > 21600:  # 6 hours in seconds
+            st.write("Forecast too far from game time")
             return None
             
         weather_description = closest_forecast['weather'][0]['description']
-        # Capitalize first letter of each word in description
         weather_description = ' '.join(word.capitalize() for word in weather_description.split())
         
-        return {
+        result = {
             'temp': round(closest_forecast['main']['temp']),
             'description': weather_description,
             'icon': closest_forecast['weather'][0]['icon']
         }
+        st.write(f"Weather found: {result}")
+        return result
+        
     except Exception as e:
+        st.write(f"Error getting weather: {str(e)}")
         return None
 
 # --- ANNOUNCEMENTS ---
@@ -801,10 +814,10 @@ def display_week_calendar(start_date, events):
                 st.write(f"**{clean_game_name(event.name)}**")
                 st.write(f"*{event_time}*")
 
-                # Add weather information
+                # Add weather information with more prominent display
                 weather = get_weather_for_time(event.begin.datetime)
                 if weather:
-                    st.write(f"🌡️ **Weather**: {weather['temp']}°F, {weather['description']}")
+                    st.info(f"🌡️ Weather: {weather['temp']}°F\n{weather['description']}")
 
                 if event.location:
                     field, address = clean_location(event.location)
