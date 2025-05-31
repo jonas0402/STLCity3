@@ -1175,18 +1175,16 @@ current_week_end = current_week_start + timedelta(days=6)
 
 # Improved event sorting
 now = datetime.now(timezone.utc)
+
+# Filter events into appropriate categories
+past_events = [e for e in events if e.begin.datetime < now]
 current_week_events = [e for e in events if current_week_start <= e.begin.date() <= current_week_end]
 future_events = [e for e in events if e.begin.date() > current_week_end]
-past_events = [e for e in events if e.begin.datetime < now]
 
 # Sort all event lists
 current_week_events.sort(key=lambda e: e.begin.datetime)
 future_events.sort(key=lambda e: e.begin.datetime)
 past_events.sort(key=lambda e: e.begin.datetime, reverse=True)  # Most recent first
-
-# Make sure past events are only those that have already happened
-now = datetime.now(timezone.utc)
-past_events = [e for e in events if e.begin.datetime < now]
 
 # --- STREAMLIT APP LAYOUT ---
 
@@ -1244,7 +1242,7 @@ with tab2:
 
 with tab3:
     st.header("Past Games")
-    display_past_games(past_events)  # Remove the if condition to always call the function
+    display_past_games(past_events)
 
 with tab4:
     st.header("My RSVPs")
