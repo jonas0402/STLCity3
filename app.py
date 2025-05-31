@@ -812,9 +812,23 @@ def display_week_calendar(start_date, events):
                             </div>
                         """, unsafe_allow_html=True)
 
-                        # Fields Map display
-                        if st.button("🗺️ See Fields Map", key=f"map_button_{event.uid}"):
-                            st.image("wwt_map.png", use_container_width=True)
+                        # Only show Fields Map for Soccer Park location
+                        if "1 Soccer Park Rd Fenton MO 63026" in address:
+                            # Initialize session state for this event's map visibility if not exists
+                            map_key = f"show_map_{event.uid}"
+                            if map_key not in st.session_state:
+                                st.session_state[map_key] = False
+                            
+                            # Toggle button text based on current state
+                            button_text = "🗺️ Hide Fields Map" if st.session_state[map_key] else "🗺️ See Fields Map"
+                            
+                            # Button to toggle map visibility
+                            if st.button(button_text, key=f"map_button_{event.uid}"):
+                                st.session_state[map_key] = not st.session_state[map_key]
+                                
+                            # Show image if state is True
+                            if st.session_state[map_key]:
+                                st.image("wwt_map.png", use_container_width=True)
 
                 # Get attendance counts
                 in_count, out_count = get_rsvp_counts(event.uid)
