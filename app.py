@@ -1095,10 +1095,6 @@ def display_past_games(past_events):
         
         if not past_games:
             st.warning(f"Found {len(all_games)} games but none are in the past relative to {today}")
-            # Debug: Show the most recent game date
-            if all_games:
-                most_recent = max(all_games, key=lambda g: g['start_time'])
-                st.write(f"Most recent game date: {most_recent['start_time']}")
             return
         
         st.write(f"Debug: Filtered to {len(past_games)} past games")
@@ -1112,17 +1108,25 @@ def display_past_games(past_events):
             
         st.info(f"Found {len(past_games)} past games across {len(seasons)} seasons")
         
-        # Create expandable section for each season
-        for season_number, season_games in enumerate(seasons, 1):
-            season_start = datetime.fromisoformat(season_games[0]['start_time']).strftime('%Y-%m-%d')
-            season_end = datetime.fromisoformat(season_games[-1]['start_time']).strftime('%Y-%m-%d')
-            
-            with st.expander(f"Season {season_number} ({season_start} to {season_end})", expanded=True):
-                for game in season_games:
-                    game_date = datetime.fromisoformat(game['start_time'])
-                    game_time = game_date.strftime('%I:%M %p')
-                    
-                    with st.expander(f"{game_date.date()} {game_time} - {clean_game_name(game['name'])}"):
+        # Create tabs for each season
+        season_tabs = st.tabs([f"Season {i+1}" for i in range(len(seasons))])
+        
+        # Display each season in its own tab
+        for season_idx, (season_games, tab) in enumerate(zip(seasons, season_tabs)):
+            with tab:
+                season_start = datetime.fromisoformat(season_games[0]['start_time']).strftime('%Y-%m-%d')
+                season_end = datetime.fromisoformat(season_games[-1]['start_time']).strftime('%Y-%m-%d')
+                st.subheader(f"Season {season_idx + 1} ({season_start} to {season_end})")
+                
+                # Create a container for the games
+                with st.container():
+                    for game in season_games:
+                        game_date = datetime.fromisoformat(game['start_time'])
+                        game_time = game_date.strftime('%I:%M %p')
+                        
+                        # Use columns instead of nested expanders
+                        st.markdown(f"### {game_date.date()} {game_time} - {clean_game_name(game['name'])}")
+                        
                         # Display game result if available
                         if game.get('result'):
                             if game['result'] == 'L':
