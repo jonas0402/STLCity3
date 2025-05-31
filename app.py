@@ -916,6 +916,26 @@ def handle_rsvp_buttons(event_uid, user_name, btn_key_prefix=""):
 
 def display_week_calendar(start_date, events):
     """Display the current week as a grid calendar with interactive RSVPs."""
+    # Add custom CSS for weather forecast and game title styling
+    st.markdown("""
+        <style>
+        .weather-box {
+            background-color: rgba(255, 243, 176, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid rgba(255, 223, 0, 0.3);
+        }
+        .game-title-box {
+            background-color: rgba(65, 105, 225, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+            border: 1px solid rgba(65, 105, 225, 0.2);
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     week_dates = [start_date + timedelta(days=i) for i in range(7)]
     
@@ -929,24 +949,31 @@ def display_week_calendar(start_date, events):
             day_events = [e for e in events if e.begin.date() == dt]
             for event in day_events:
                 event_time = event.begin.format("h:mm A")
-                st.write(f"**{clean_game_name(event.name)}**")
-                st.write(f"*{event_time}*")
+                
+                # Display game title and time in styled box
+                st.markdown(f"""
+                    <div class="game-title-box">
+                        <strong>{clean_game_name(event.name)}</strong><br>
+                        <em>{event_time}</em>
+                    </div>
+                """, unsafe_allow_html=True)
 
                 if event.location:
                     field, address = clean_location(event.location)
 
-                    # Add weather information with more prominent display
+                    # Add weather information with custom styling
                     weather = get_weather_for_time(event.begin.datetime, address)
                     if weather:
                         st.markdown(f"""
-##### 🌡️ Forecast for Game Time ({event_time}):
-
-**Temperature:**  {weather['temp']}°F _(Feels like {weather['feels_like']}°F)_  
-**Conditions:**   {weather['description']}  
-**Wind:**         {weather['wind_speed']} mph  
-**Humidity:**     {weather['humidity']}%  
-**Rain chance:**  {weather['precipitation_chance']}%
-                        """)
+                        <div class="weather-box">
+                            <h5>🌡️ Forecast for Game Time ({event_time}):</h5>
+                            <p><strong>Temperature:</strong> {weather['temp']}°F <em>(Feels like {weather['feels_like']}°F)</em><br>
+                            <strong>Conditions:</strong> {weather['description']}<br>
+                            <strong>Wind:</strong> {weather['wind_speed']} mph<br>
+                            <strong>Humidity:</strong> {weather['humidity']}%<br>
+                            <strong>Rain chance:</strong> {weather['precipitation_chance']}%</p>
+                        </div>
+                        """, unsafe_allow_html=True)
 
                     if field:
                         st.write(f"🏟️ **Field**: {field}")
