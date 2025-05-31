@@ -818,13 +818,12 @@ def display_week_calendar(start_date, events):
                             map_key = f"show_map_{event.uid}"
                             if map_key not in st.session_state:
                                 st.session_state[map_key] = False
-                            
-                            # Toggle button text based on current state
-                            button_text = "🗺️ Hide Fields Map" if st.session_state[map_key] else "🗺️ See Fields Map"
-                            
+
                             # Button to toggle map visibility
-                            if st.button(button_text, key=f"map_button_{event.uid}"):
+                            if st.button("🗺️ See Fields Map" if not st.session_state[map_key] else "🗺️ Hide Fields Map", 
+                                       key=f"map_button_{event.uid}"):
                                 st.session_state[map_key] = not st.session_state[map_key]
+                                st.rerun()
                                 
                             # Show image if state is True
                             if st.session_state[map_key]:
