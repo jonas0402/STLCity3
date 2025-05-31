@@ -1,6 +1,5 @@
 import streamlit as st
 from supabase import create_client
-from dotenv import load_dotenv
 import os
 import requests
 from ics import Calendar
@@ -16,11 +15,8 @@ import urllib3
 import urllib.parse
 import base64
 
-# Load environment variables
-load_dotenv()
-
 # Weather API configuration
-WEATHER_API_KEY = os.getenv('OPENWEATHER_API_KEY', '')
+WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", "")
 WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
 STL_LAT = 38.6270
 STL_LON = -90.1994
