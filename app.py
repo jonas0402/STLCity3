@@ -16,7 +16,7 @@ import urllib.parse
 import base64
 
 # Weather API configuration
-WEATHER_API_KEY = st.secrets["OPENWEATHER_API_KEY"]  # Remove the .get() and default value
+WEATHER_API_KEY = st.secrets["openweather"]["api_key"]
 WEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5/forecast"
 STL_LAT = 38.6270
 STL_LON = -90.1994
